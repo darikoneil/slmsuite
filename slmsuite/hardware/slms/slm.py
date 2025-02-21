@@ -93,6 +93,7 @@ class SLM(_Picklable):
     display : numpy.ndarray
         Displayed data in SLM units (integers).
     """
+
     _pickle = [
         "name",
         "shape",
@@ -118,7 +119,7 @@ class SLM(_Picklable):
         name="SLM",
         wav_um=1,
         wav_design_um=None,
-        pitch_um=(8,8),
+        pitch_um=(8, 8),
         settle_time_s=0.3,
     ):
         """
@@ -171,14 +172,14 @@ class SLM(_Picklable):
         if isinstance(pitch_um, REAL_TYPES):
             pitch_um = [pitch_um, pitch_um]
         self.pitch_um = np.squeeze(pitch_um)
-        if (len(self.pitch_um) != 2):
+        if len(self.pitch_um) != 2:
             raise ValueError("Expected (float, float) for pitch_um")
         self.pitch_um = np.array([float(self.pitch_um[0]), float(self.pitch_um[1])])
 
         self.pitch = self.pitch_um / self.wav_um
 
         # Make normalized coordinate grids.
-        xpix = (width  - 1) * np.linspace(-0.5, 0.5, width)
+        xpix = (width - 1) * np.linspace(-0.5, 0.5, width)
         ypix = (height - 1) * np.linspace(-0.5, 0.5, height)
         self.grid = list(np.meshgrid(self.pitch[0] * xpix, self.pitch[1] * ypix))
 
@@ -245,16 +246,22 @@ class SLM(_Picklable):
             the vendor-provided phase correction.
         """
         # Load an invert the image file (see phase sign convention rules in set_phase).
-        phase_correction = self.bitresolution - 1 - np.array(Image.open(file_path), dtype=float)
+        phase_correction = (
+            self.bitresolution - 1 - np.array(Image.open(file_path), dtype=float)
+        )
 
         if phase_correction.ndim != 2:
-            raise ValueError("Expected 2D image; found shape {}.".format(phase_correction.shape))
+            raise ValueError(
+                "Expected 2D image; found shape {}.".format(phase_correction.shape)
+            )
 
         phase_correction *= 2 * np.pi / (self.phase_scaling * self.bitresolution)
 
         # Deal with correction shape
         # (this should be made into a toolbox method to supplement pad, unpad)
-        file_shape_error = np.sign(np.array(phase_correction.shape) - np.array(self.shape))
+        file_shape_error = np.sign(
+            np.array(phase_correction.shape) - np.array(self.shape)
+        )
 
         if np.abs(np.diff(file_shape_error)) > 1:
             raise ValueError(
@@ -296,13 +303,13 @@ class SLM(_Picklable):
         """
         if phase is None:
             phase = self.phase
-        phase = np.array(phase, copy=(False if np.__version__[0] == '1' else None))
-        phase = np.mod(phase, 2*np.pi) / np.pi
+        phase = np.array(phase, copy=(False if np.__version__[0] == "1" else None))
+        phase = np.mod(phase, 2 * np.pi) / np.pi
 
         if len(plt.get_fignums()) > 0:
             fig = plt.gcf()
         else:
-            fig = plt.figure(figsize=(20,8))
+            fig = plt.figure(figsize=(20, 8))
 
         if ax is not None:
             plt.sca(ax)
@@ -313,8 +320,8 @@ class SLM(_Picklable):
         if cbar:
             cax = make_axes_locatable(ax).append_axes("right", size="2%", pad=0.05)
             fig.colorbar(im, cax=cax, orientation="vertical")
-            ticks = [0,1,2]
-            cax.set_yticks([0,1,2])
+            ticks = [0, 1, 2]
+            cax.set_yticks([0, 1, 2])
             cax.set_yticklabels([f"${t}\\pi$" for t in ticks])
 
         # ax.invert_yaxis()
@@ -328,10 +335,12 @@ class SLM(_Picklable):
                 deltas = np.squeeze(np.diff(axlim, axis=1)) * limits / 2
 
                 limits = np.vstack((centers - deltas, centers + deltas)).T
-            elif np.shape(limits) == (2,2):
+            elif np.shape(limits) == (2, 2):
                 pass
             else:
-                raise ValueError(f"limits format {limits} not recognized; provide a scalar or limits.")
+                raise ValueError(
+                    f"limits format {limits} not recognized; provide a scalar or limits."
+                )
 
             ax.set_xlim(limits[0])
             ax.set_ylim(limits[1])
@@ -652,15 +661,15 @@ class SLM(_Picklable):
             The file path that the phase was saved to.
         """
         if name is None:
-            name = self.name + '_phase'
+            name = self.name + "_phase"
         file_path = generate_path(path, name, extension="h5")
         save_h5(
             file_path,
             {
-                "__version__" : __version__,
-                "phase" : self.phase,
-                "display" : self.display,
-            }
+                "__version__": __version__,
+                "phase": self.phase,
+                "display": self.display,
+            },
         )
 
         return file_path
@@ -695,12 +704,13 @@ class SLM(_Picklable):
         """
         if file_path is None:
             path = os.path.abspath(".")
-            name = self.name + '_phase'
+            name = self.name + "_phase"
             file_path = latest_path(path, name, extension="h5")
             if file_path is None:
                 raise FileNotFoundError(
-                    "Unable to find a phase file like\n{}"
-                    "".format(os.path.join(path, name))
+                    "Unable to find a phase file like\n{}".format(
+                        os.path.join(path, name)
+                    )
                 )
 
         data = load_h5(file_path)
@@ -710,7 +720,9 @@ class SLM(_Picklable):
         self.phase = data["phase"]
 
         if not np.all(np.isclose(data["display"], self._phase2gray(data["phase"]))):
-            warnings.warn("Integer data in 'display' does not match 'phase' for this SLM.")
+            warnings.warn(
+                "Integer data in 'display' does not match 'phase' for this SLM."
+            )
 
         # Optional delay.
         if settle:
@@ -721,13 +733,13 @@ class SLM(_Picklable):
     # Source and calibration methods
 
     def set_source_analytic(
-            self,
-            fit_function="gaussian2d",
-            units="norm",
-            phase_offset=0,
-            sim=False,
-            **kwargs
-        ):
+        self,
+        fit_function="gaussian2d",
+        units="norm",
+        phase_offset=0,
+        sim=False,
+        **kwargs,
+    ):
         """
         In the absence of a proper wavefront calibration, sets
         :attr:`~slmsuite.hardware.slms.slm.SLM.source` amplitude and phase using a
@@ -774,7 +786,7 @@ class SLM(_Picklable):
         """
         # Wavelength normalized
         if units == "norm":
-            scaling = (1,1)
+            scaling = (1, 1)
         # Fractions of the display
         elif units == "frac":
             scaling = [g.ptp() for g in self.grid]
@@ -786,11 +798,15 @@ class SLM(_Picklable):
                 raise RuntimeError("Did not recognize units '{}'".format(units))
             scaling = [factor / self.wav_um, factor / self.wav_um]
 
-        xy = [g / s for g,s in zip(self.grid, scaling)]
+        xy = [g / s for g, s in zip(self.grid, scaling)]
 
-        if len(kwargs) == 0 and isinstance(fit_function, str) and fit_function == "gaussian2d":
+        if (
+            len(kwargs) == 0
+            and isinstance(fit_function, str)
+            and fit_function == "gaussian2d"
+        ):
             w = np.min([np.amax(xy[0]), np.amax(xy[1])]) / 2
-            kwargs = {"x0" : 0, "y0" : 0, "a" : 1, "c" : 0, "wx" : w, "wy" : w}
+            kwargs = {"x0": 0, "y0": 0, "a": 1, "c": 0, "wx": w, "wy": w}
 
         if isinstance(fit_function, str):
             fit_function = getattr(fitfunctions, fit_function)
@@ -802,7 +818,7 @@ class SLM(_Picklable):
 
         return self.source
 
-    def fit_source_amplitude(self, method="moments", extent_threshold=.1, force=True):
+    def fit_source_amplitude(self, method="moments", extent_threshold=0.1, force=True):
         """
         Extracts various :attr:`source` parameters from the source for use in
         analytic functions. This is done by analyzing the :attr:`source` ``["amplitude"]``
@@ -889,43 +905,49 @@ class SLM(_Picklable):
             return
 
         center_grid = np.array(
-            [np.argmin(np.abs(self.grid[0][0,:])), np.argmin(np.abs(self.grid[1][:,0]))]
+            [
+                np.argmin(np.abs(self.grid[0][0, :])),
+                np.argmin(np.abs(self.grid[1][:, 0])),
+            ]
         )
 
         if not "amplitude" in self.source:
             # If there is no measured source amplitude, then make guesses based off of the grid.
             self.source["amplitude_center_pix"] = center_grid
-            self.source["amplitude_radius"] = .25 * np.min((
-                self.shape[1] * self.pitch[0],
-                self.shape[0] * self.pitch[1]
-            ))
+            self.source["amplitude_radius"] = 0.25 * np.min(
+                (self.shape[1] * self.pitch[0], self.shape[0] * self.pitch[1])
+            )
             self.source["amplitude_extent"] = np.array(
                 [np.max(np.abs(self.grid[0])), np.max(np.abs(self.grid[1]))]
             )
-            self.source["amplitude_extent_radius"] = np.sqrt(np.amax(
-                np.square(self.grid[0]) + np.square(self.grid[1])
-            ))
+            self.source["amplitude_extent_radius"] = np.sqrt(
+                np.amax(np.square(self.grid[0]) + np.square(self.grid[1]))
+            )
         else:
             # Otherwise, use the measured amplitude distribution.
             amp = np.abs(self.source["amplitude"])
 
             # Parse extent_threshold
             if extent_threshold > 1:
-                raise RuntimeError("extent_threshold cannot exceed 1 (100%). Use a small value.")
+                raise RuntimeError(
+                    "extent_threshold cannot exceed 1 (100%). Use a small value."
+                )
 
             if method == "fit":
                 result = analysis.image_fit(amp, plot=False)
-                std = np.array([result[0,5], result[0,6]])
+                std = np.array([result[0, 5], result[0, 6]])
 
-                center = np.array([result[0,1], result[0,2]])
+                center = np.array([result[0, 1], result[0, 2]])
             elif method == "moments":
                 # Do moments in power-space, not amplitude.
                 center = analysis.image_positions(np.square(amp))
-                std = np.sqrt(2 * analysis.image_variances(np.square(amp), centers=center)[:2])
+                std = np.sqrt(
+                    2 * analysis.image_variances(np.square(amp), centers=center)[:2]
+                )
 
                 center = np.squeeze(center)
 
-            center += np.flip(self.shape)/2
+            center += np.flip(self.shape) / 2
 
             self.source["amplitude_center_pix"] = center
             self.source["amplitude_radius"] = np.mean(self.pitch * np.squeeze(std))
@@ -937,18 +959,23 @@ class SLM(_Picklable):
             self.grid[1] += dcenter[1] * self.pitch[1]
 
             center_grid = np.array(
-                [np.argmin(self.grid[0][0,:]), np.argmin(self.grid[1][:,0])]
+                [np.argmin(self.grid[0][0, :]), np.argmin(self.grid[1][:, 0])]
             )
 
             extent_mask = amp > (extent_threshold * np.amax(amp))
 
-            self.source["amplitude_extent"] = np.array([
-                np.max(np.abs(self.grid[0][extent_mask])),
-                np.max(np.abs(self.grid[1][extent_mask]))
-            ])
-            self.source["amplitude_extent_radius"] = np.sqrt(np.amax(
-                np.square(self.grid[0][extent_mask]) + np.square(self.grid[1][extent_mask])
-            ))
+            self.source["amplitude_extent"] = np.array(
+                [
+                    np.max(np.abs(self.grid[0][extent_mask])),
+                    np.max(np.abs(self.grid[1][extent_mask])),
+                ]
+            )
+            self.source["amplitude_extent_radius"] = np.sqrt(
+                np.amax(
+                    np.square(self.grid[0][extent_mask])
+                    + np.square(self.grid[1][extent_mask])
+                )
+            )
 
     def get_source_radius(self):
         """
@@ -1014,8 +1041,12 @@ class SLM(_Picklable):
         """
 
         # Check if proper source keywords are present
-        if sim and not np.all([k in self.source for k in ("amplitude_sim", "phase_sim")]):
-            raise RuntimeError("Simulated amplitude and/or phase keywords missing from slm.source!")
+        if sim and not np.all(
+            [k in self.source for k in ("amplitude_sim", "phase_sim")]
+        ):
+            raise RuntimeError(
+                "Simulated amplitude and/or phase keywords missing from slm.source!"
+            )
         elif not sim and not np.all([k in self.source for k in ("amplitude", "phase")]):
             raise RuntimeError(
                 "'amplitude' or 'phase' keywords missing from slm.source! Run "
@@ -1028,7 +1059,7 @@ class SLM(_Picklable):
 
         im = axs[0].imshow(
             # self._phase2gray(self.source["phase_sim" if sim else "phase"]),
-            np.mod(self.source["phase_sim" if sim else "phase"], 2*np.pi),
+            np.mod(self.source["phase_sim" if sim else "phase"], 2 * np.pi),
             cmap=plt.get_cmap("twilight"),
             interpolation="none",
         )
@@ -1037,18 +1068,22 @@ class SLM(_Picklable):
         axs[0].set_ylabel("SLM $y$ [pix]")
         divider = make_axes_locatable(axs[0])
         cax = divider.append_axes("right", size="5%", pad=0.05)
-        im.set_clim([0, 2*np.pi])
+        im.set_clim([0, 2 * np.pi])
         plt.colorbar(im, cax=cax)
 
         if power:
             im = axs[1].imshow(
                 np.square(self.source["amplitude_sim" if sim else "amplitude"]),
-                clim=(0, 1)
+                clim=(0, 1),
             )
             axs[1].set_title("Simulated Source Power" if sim else "Source Power")
         else:
-            im = axs[1].imshow(self.source["amplitude_sim" if sim else "amplitude"], clim=(0, 1))
-            axs[1].set_title("Simulated Source Amplitude" if sim else "Source Amplitude")
+            im = axs[1].imshow(
+                self.source["amplitude_sim" if sim else "amplitude"], clim=(0, 1)
+            )
+            axs[1].set_title(
+                "Simulated Source Amplitude" if sim else "Source Amplitude"
+            )
         axs[1].set_xlabel("SLM $x$ [pix]")
         axs[1].set_ylabel("SLM $y$ [pix]")
         # axs[1].set_yticks([])
@@ -1088,7 +1123,9 @@ class SLM(_Picklable):
             The point spread function of shape ``padded_shape``.
         """
         nearfield = toolbox.pad(self._get_source_amplitude(), padded_shape)
-        farfield = np.abs(np.fft.fftshift(np.fft.fft2(np.fft.fftshift(nearfield), norm="ortho")))
+        farfield = np.abs(
+            np.fft.fftshift(np.fft.fft2(np.fft.fftshift(nearfield), norm="ortho"))
+        )
 
         return farfield
 

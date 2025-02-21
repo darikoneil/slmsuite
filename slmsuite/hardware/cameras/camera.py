@@ -1,6 +1,7 @@
 """
 Abstract camera functionality.
 """
+
 import time
 import asyncio
 import warnings
@@ -78,6 +79,7 @@ class Camera(_Picklable):
         used and the type of :attr:`averaging`.
         Is ``None`` if no image has ever been taken.
     """
+
     _pickle = [
         "name",
         "shape",
@@ -187,7 +189,7 @@ class Camera(_Picklable):
         # Set exposure information.
         self.exposure_bounds_s = None
 
-        self.exposure_s = 1 # Default to 1s for Simulated cameras.
+        self.exposure_s = 1  # Default to 1s for Simulated cameras.
         self.exposure_s = self.get_exposure()
 
         # Set datatype variables.
@@ -204,7 +206,7 @@ class Camera(_Picklable):
             if isinstance(pitch_um, REAL_TYPES):
                 pitch_um = [pitch_um, pitch_um]
             self.pitch_um = np.squeeze(pitch_um)
-            if (len(self.pitch_um) != 2):
+            if len(self.pitch_um) != 2:
                 raise ValueError("Expected (float, float) for pitch_um")
             self.pitch_um = np.array([float(self.pitch_um[0]), float(self.pitch_um[1])])
         else:
@@ -276,7 +278,9 @@ class Camera(_Picklable):
         Abstract method to interface with hardware and get the frame integration time in seconds.
         Subclasses must implement this.
         """
-        raise NotImplementedError(f"Camera {self.name} has not implemented _get_exposure_hw")
+        raise NotImplementedError(
+            f"Camera {self.name} has not implemented _get_exposure_hw"
+        )
 
     def _set_exposure_hw(self, exposure_s):
         """
@@ -288,7 +292,9 @@ class Camera(_Picklable):
         exposure_s : float
             The integration time in seconds.
         """
-        raise NotImplementedError(f"Camera {self.name} has not implemented _set_exposure_hw")
+        raise NotImplementedError(
+            f"Camera {self.name} has not implemented _set_exposure_hw"
+        )
 
     def set_woi(self, woi=None):
         """
@@ -324,7 +330,7 @@ class Camera(_Picklable):
             such that there is always enough time to expose.
         """
         for _ in range(2):
-            self._get_image_hw_tolerant(timeout_s=timeout_s+self.exposure_s)
+            self._get_image_hw_tolerant(timeout_s=timeout_s + self.exposure_s)
 
     def _get_image_hw(self, timeout_s):
         """
@@ -342,7 +348,9 @@ class Camera(_Picklable):
         numpy.ndarray
             Array of shape :attr:`~slmsuite.hardware.cameras.camera.Camera.shape`.
         """
-        raise NotImplementedError(f"Camera {self.name} has not implemented _get_image_hw")
+        raise NotImplementedError(
+            f"Camera {self.name} has not implemented _get_image_hw"
+        )
 
     def _get_images_hw(self, image_count, timeout_s, out=None):
         """
@@ -363,7 +371,9 @@ class Camera(_Picklable):
         numpy.ndarray
             Array of shape (n_frames, :attr:`~slmsuite.hardware.cameras.camera.Camera.shape`).
         """
-        raise NotImplementedError(f"Camera {self.name} has not implemented _get_images_hw")
+        raise NotImplementedError(
+            f"Camera {self.name} has not implemented _get_images_hw"
+        )
 
     # Capture methods one level of abstraction above _get_image_hw().
 
@@ -374,7 +384,10 @@ class Camera(_Picklable):
             try:
                 return self._get_image_hw(*args, **kwargs)
             except Exception as e:
-                if i > 0: warnings.warn(f"'{self.name}' _get_image_hw() failed on attempt {i+1}.")
+                if i > 0:
+                    warnings.warn(
+                        f"'{self.name}' _get_image_hw() failed on attempt {i + 1}."
+                    )
                 err = e
 
         raise err
@@ -386,14 +399,19 @@ class Camera(_Picklable):
             try:
                 return self._get_images_hw(*args, **kwargs)
             except Exception as e:
-                if i > 0: warnings.warn(f"'{self.name}' _get_images_hw() failed on attempt {i+1}.")
+                if i > 0:
+                    warnings.warn(
+                        f"'{self.name}' _get_images_hw() failed on attempt {i + 1}."
+                    )
                 err = e
 
         raise err
 
     def _get_dtype(self):
         try:
-            self.dtype = np.array(self._get_image_hw_tolerant()).dtype   # Future: check if cameras change this after init.
+            self.dtype = np.array(
+                self._get_image_hw_tolerant()
+            ).dtype  # Future: check if cameras change this after init.
         except:
             if self.bitdepth > 16:
                 self.dtype = float
@@ -408,7 +426,7 @@ class Camera(_Picklable):
                     f"Camera '{self.name}' bitdepth of {self.bitdepth} does not conform "
                     f"with the image type {self.dtype} with {self.dtype.itemsize} bytes."
                 )
-        except:     # The above sometimes fails for non-numpy datatypes.
+        except:  # The above sometimes fails for non-numpy datatypes.
             pass
 
     def _parse_averaging(self, averaging=None, preserve_none=False):
@@ -483,7 +501,9 @@ class Camera(_Picklable):
             # Return floating point.
             return self.dtype
         else:
-            raise ValueError(f"Datatype {self.dtype} does not make sense as a camera return.")
+            raise ValueError(
+                f"Datatype {self.dtype} does not make sense as a camera return."
+            )
 
     def get_image(self, timeout_s=1, transform=True, hdr=None, averaging=None):
         """
@@ -553,20 +573,20 @@ class Camera(_Picklable):
         (exposures, exposure_power) = self._parse_hdr(hdr)
 
         # Switch based on what imaging case we're in.
-        if exposures > 1:       # Average many images with increasing exposure.
+        if exposures > 1:  # Average many images with increasing exposure.
             return self.get_image_hdr(
                 (exposures, exposure_power),
                 timeout_s=timeout_s,
                 transform=transform,
                 averaging=averaging,
             )
-        elif averaging > 1:     # Average many images.
+        elif averaging > 1:  # Average many images.
             averaging_dtype = self._get_averaging_dtype(averaging)
 
             try:
                 # Using the camera-specific batch method if available
                 imgs = self._get_images_hw(
-                    averaging, timeout_s=timeout_s+self.exposure_s
+                    averaging, timeout_s=timeout_s + self.exposure_s
                 ).astype(averaging_dtype)
 
                 # Cast as the proper type so we can sum.
@@ -577,12 +597,10 @@ class Camera(_Picklable):
 
                 for _ in range(averaging):
                     img += self._get_image_hw_tolerant(
-                        timeout_s=timeout_s+self.exposure_s
+                        timeout_s=timeout_s + self.exposure_s
                     ).astype(averaging_dtype)
-        else:                   # Normal image
-            img = self._get_image_hw_tolerant(
-                timeout_s=timeout_s+self.exposure_s
-            )
+        else:  # Normal image
+            img = self._get_image_hw_tolerant(timeout_s=timeout_s + self.exposure_s)
 
         # self.transform implements the flipping and rotating keywords passed to the
         # superclass constructor.
@@ -601,7 +619,9 @@ class Camera(_Picklable):
 
         return img
 
-    def get_images(self, image_count, timeout_s=1, out=None, transform=True, flush=False):
+    def get_images(
+        self, image_count, timeout_s=1, out=None, transform=True, flush=False
+    ):
         """
         Grab ``image_count`` images in succession.
 
@@ -638,9 +658,13 @@ class Camera(_Picklable):
             imgs = np.empty(out_shape, dtype=self.dtype)
         else:
             if out.shape != out_shape:
-                raise ValueError(f"Expected out to be of shape {out_shape}. Found {out.shape}.")
+                raise ValueError(
+                    f"Expected out to be of shape {out_shape}. Found {out.shape}."
+                )
             if out.dtype != self.dtype:
-                raise ValueError(f"Expected out to be of type {self.dtype}. Found {out.dtype}.")
+                raise ValueError(
+                    f"Expected out to be of type {self.dtype}. Found {out.dtype}."
+                )
             imgs = np.array(out, copy=False, dtype=self.dtype)
 
         # Flush if desired.
@@ -651,22 +675,19 @@ class Camera(_Picklable):
         try:
             # Using the camera-specific method if available
             imgs = self._get_images_hw(
-                image_count,
-                timeout_s=timeout_s+self.exposure_s,
-                out=imgs
+                image_count, timeout_s=timeout_s + self.exposure_s, out=imgs
             )
         except NotImplementedError:
             # Brute-force collection as a backup
             for i in range(image_count):
                 imgs[i, :, :] = self._get_image_hw_tolerant(
-                    timeout_s=timeout_s+self.exposure_s
+                    timeout_s=timeout_s + self.exposure_s
                 )
 
         # Transform if desired.
         if transform:
             imgs_ = np.empty(
-                (int(image_count), self.shape[0], self.shape[1]),
-                dtype=self.dtype
+                (int(image_count), self.shape[0], self.shape[1]), dtype=self.dtype
             )
             for i in range(image_count):
                 imgs_[i, :, :] = self.transform(imgs[i])
@@ -739,8 +760,8 @@ class Camera(_Picklable):
 
         for i in range(exposures):
             # FUTURE: record the set exposures and use these to do better analysis.
-            self.set_exposure(int(exposure_power ** i) * original_exposure)
-            self.flush()    # Sometimes, cameras return bad frames after exposure change.
+            self.set_exposure(int(exposure_power**i) * original_exposure)
+            self.flush()  # Sometimes, cameras return bad frames after exposure change.
             imgs[i, :, :] = self.get_image(hdr=False, **kwargs)
 
         # Reset exposure.
@@ -750,7 +771,11 @@ class Camera(_Picklable):
         if return_raw:
             return imgs
         else:
-            img = self.get_image_hdr_analysis(imgs, exposure_power=exposure_power, overexposure_threshold=self.bitresolution/2)
+            img = self.get_image_hdr_analysis(
+                imgs,
+                exposure_power=exposure_power,
+                overexposure_threshold=self.bitresolution / 2,
+            )
             if np.max(img) >= self.bitresolution:
                 warnings.warn("HDR image is overexposed.")
             # Store the result locally.
@@ -803,7 +828,7 @@ class Camera(_Picklable):
             else:
                 # Overwrite data when greater precision is available.
                 mask = img_current < overexposure_threshold
-                img[mask] = img_current[mask] / float(exposure_power ** i)
+                img[mask] = img_current[mask] / float(exposure_power**i)
 
         return img
 
@@ -834,12 +859,12 @@ class Camera(_Picklable):
         if image is None:
             self.flush()
             image = self.get_image()
-        image = np.array(image, copy=(False if np.__version__[0] == '1' else None))
+        image = np.array(image, copy=(False if np.__version__[0] == "1" else None))
 
         if len(plt.get_fignums()) > 0:
             fig = plt.gcf()
         else:
-            fig = plt.figure(figsize=(20,8))
+            fig = plt.figure(figsize=(20, 8))
 
         if ax is not None:
             plt.sca(ax)
@@ -862,10 +887,12 @@ class Camera(_Picklable):
                 deltas = np.squeeze(np.diff(axlim, axis=1)) * limits / 2
 
                 limits = np.vstack((centers - deltas, centers + deltas)).T
-            elif np.shape(limits) == (2,2):
+            elif np.shape(limits) == (2, 2):
                 pass
             else:
-                raise ValueError(f"limits format {limits} not recognized; provide a scalar or limits.")
+                raise ValueError(
+                    f"limits format {limits} not recognized; provide a scalar or limits."
+                )
 
             ax.set_xlim(limits[0])
             ax.set_ylim(limits[1])
@@ -940,12 +967,7 @@ class Camera(_Picklable):
             if self.viewer is not None:
                 self.viewer.close()
 
-            self.viewer = _CameraViewer(
-                self,
-                widgets,
-                backend,
-                **kwargs
-            )
+            self.viewer = _CameraViewer(self, widgets, backend, **kwargs)
         elif self.viewer is not None and (activate is None or not activate):
             self.viewer.close()
             self.viewer = None
@@ -1031,7 +1053,10 @@ class Camera(_Picklable):
             err = np.abs(im_max - set_val) / self.bitresolution
 
             if verbose:
-                print("Reset exposure to %1.2fs; maximum image value = %d." % (exp, im_max))
+                print(
+                    "Reset exposure to %1.2fs; maximum image value = %d."
+                    % (exp, im_max)
+                )
 
         exp_fin = exp * 2 * set_fraction
 
@@ -1093,7 +1118,9 @@ class Camera(_Picklable):
                 axs[0].set_xticks([])
                 axs[0].set_yticks([])
                 axs[1].imshow(dft_norm)
-                axs[1].set_title(f"FFT\nFoM$ = \\int\\int $|FFT|$ / $max|FFT|$ = {fom_}$")
+                axs[1].set_title(
+                    f"FFT\nFoM$ = \\int\\int $|FFT|$ / $max|FFT|$ = {fom_}$"
+                )
                 axs[1].set_xticks([])
                 axs[1].set_yticks([])
                 plt.show()
@@ -1101,7 +1128,12 @@ class Camera(_Picklable):
         counts[0] = counts[1]
 
         popt0 = np.array(
-            [z_list[np.argmax(counts)], np.max(counts) - np.min(counts), np.min(counts), 100]
+            [
+                z_list[np.argmax(counts)],
+                np.max(counts) - np.min(counts),
+                np.min(counts),
+                100,
+            ]
         )
 
         try:
@@ -1153,23 +1185,31 @@ class _CameraViewer:
     """
     Hidden class for live camera viewing enabled by ipython widgets.
     """
+
     def __init__(
-            self,
-            cam,
-            widgets,
-            backend="ipython",
-            live=False,
-            min=None,
-            max=None,
-            log=False,
-            cmap=True,
-            scale=1,
-            border=None,
-            cmap_options=[
-                "default", "gray", "Blues", "turbo",
-                'viridis', 'plasma', 'inferno', 'magma', 'cividis'
-            ]
-        ):
+        self,
+        cam,
+        widgets,
+        backend="ipython",
+        live=False,
+        min=None,
+        max=None,
+        log=False,
+        cmap=True,
+        scale=1,
+        border=None,
+        cmap_options=[
+            "default",
+            "gray",
+            "Blues",
+            "turbo",
+            "viridis",
+            "plasma",
+            "inferno",
+            "magma",
+            "cividis",
+        ],
+    ):
         self.cam = cam
         self.backend = backend
 
@@ -1177,30 +1217,33 @@ class _CameraViewer:
         if min is None:
             min = 0
         if max is None:
-            max = cam.bitresolution-1
+            max = cam.bitresolution - 1
         range = [min, max]
         range = [np.min(range), np.max(range)]
 
-        if cmap is True: cmap = "default"
-        if cmap is False: cmap = "grayscale"
+        if cmap is True:
+            cmap = "default"
+        if cmap is False:
+            cmap = "grayscale"
 
         # Parse scale
         scale = 2 ** np.round(np.log2(scale))
 
         self.state = {
-            "backend" : backend,
-            "live" : live,
-            "range" : range,
-            "log" : bool(log),
-            "cmap" : cmap,
-            "scale" : scale,
-            "border" : border,
-            "cmap_options" : cmap_options,
+            "backend": backend,
+            "live": live,
+            "range": range,
+            "log": bool(log),
+            "cmap": cmap,
+            "scale": scale,
+            "border": border,
+            "cmap_options": cmap_options,
         }
 
         self.task = None
         self.widgets = {}
-        if widgets: self.init_widgets()
+        if widgets:
+            self.init_widgets()
         self.init_image()
 
     def parse(self, img=None):
@@ -1213,8 +1256,9 @@ class _CameraViewer:
         if self.state["scale"] < 1:
             img = zoom(
                 self.prev_img,
-                [self.state["scale"], self.state["scale"]] + ([1] if len(self.prev_img.shape) == 3 else []),
-                order=1
+                [self.state["scale"], self.state["scale"]]
+                + ([1] if len(self.prev_img.shape) == 3 else []),
+                order=1,
             )
         else:
             img = np.copy(self.prev_img)
@@ -1227,7 +1271,7 @@ class _CameraViewer:
 
         if self.state["log"]:
             # clip to avoid log(0)
-            img = (np.log10(np.clip(img, 1, np.inf)) / np.log10(d+1))
+            img = np.log10(np.clip(img, 1, np.inf)) / np.log10(d + 1)
 
         # Make image color
         rgb = _gray2rgb(
@@ -1235,7 +1279,7 @@ class _CameraViewer:
             cmap=self.state["cmap"],
             lut=d,
             normalize=False,
-            border=self.state["border"]
+            border=self.state["border"],
         )
 
         # Upscaling can happen after intensive operations.
@@ -1302,62 +1346,72 @@ class _CameraViewer:
         display(self.image)
 
     def init_widgets(self):
-        from ipywidgets import HTML, IntRangeSlider, ToggleButton, Button, Checkbox, Dropdown, FloatLogSlider, Output, Layout
+        from ipywidgets import (
+            HTML,
+            IntRangeSlider,
+            ToggleButton,
+            Button,
+            Checkbox,
+            Dropdown,
+            FloatLogSlider,
+            Output,
+            Layout,
+        )
 
         item_layout = Layout(width="auto")
         range_layout = Layout(width="70%")
 
         self.widgets = {
-            "name" : HTML(
+            "name": HTML(
                 value=f"<b>{self.cam.name}</b>",
                 description="Viewing",
                 tooltip="Name of the camera.",
                 layout=item_layout,
             ),
-            "live" : ToggleButton(
+            "live": ToggleButton(
                 value=self.state["live"],
                 description="Live",
                 tooltip="Toggle an asyncio loop to poll images from the camera.",
                 layout=item_layout,
             ),
-            "range" : IntRangeSlider(
+            "range": IntRangeSlider(
                 value=self.state["range"],
                 min=0,
-                max=self.cam.bitresolution-1,
+                max=self.cam.bitresolution - 1,
                 step=1,
                 description="Range",
                 tooltip="Color scale of the plot.",
                 layout=range_layout,
             ),
-            "autorange" : Button(
+            "autorange": Button(
                 description="AutoRange",
                 tooltip="Scale the plot to the minimum and maximum of the current image.",
                 layout=item_layout,
             ),
-            "log" : Checkbox(
+            "log": Checkbox(
                 value=self.state["log"],
                 description="Logarithmic",
                 tooltip="Toggle logarithmic scaling of the current plot.",
                 layout=item_layout,
             ),
-            "cmap" : Dropdown(
+            "cmap": Dropdown(
                 options=self.state["cmap_options"],
                 value=self.state["cmap"],
                 description="Colormap",
                 tooltip="Choose the colormap to use for display.",
                 layout=item_layout,
             ),
-            "scale" : FloatLogSlider(
+            "scale": FloatLogSlider(
                 value=self.state["scale"],
                 base=2,
-                min=-3, # 12.5%
+                min=-3,  # 12.5%
                 max=3,  # 800%
                 step=1,
                 description="Scale",
                 tooltip="Scale the image by powers of two.",
                 layout=item_layout,
             ),
-            "output": Output()
+            "output": Output(),
         }
 
         for k, w in self.widgets.items():
@@ -1386,44 +1440,46 @@ class _CameraViewer:
         # ])
 
         box_layout1 = Layout(
-            display="flex",
-            flex_flow="auto",
-            align_items="stretch",
-            width="70%"
+            display="flex", flex_flow="auto", align_items="stretch", width="70%"
         )
         box_layout2 = Layout(
-            display="flex",
-            flex_flow="auto",
-            align_items="stretch",
-            width="30%"
+            display="flex", flex_flow="auto", align_items="stretch", width="30%"
         )
 
-        self.widgets["layout"] = HBox([
-            VBox(
-                [
-                    HBox([
-                        self.widgets["name"],
-                    ]),
-                    HBox([
-                        self.widgets["cmap"],
-                        self.widgets["log"],
-                    ]),
-                    HBox([
-                        self.widgets["range"],
-                    ]),
-                    self.widgets["output"],
-                ],
-                layout=box_layout1,
-            ),
-            VBox(
-                [
-                    self.widgets["live"],
-                    self.widgets["scale"],
-                    self.widgets["autorange"],
-                ],
-                layout=box_layout2,
-            )
-        ])
+        self.widgets["layout"] = HBox(
+            [
+                VBox(
+                    [
+                        HBox(
+                            [
+                                self.widgets["name"],
+                            ]
+                        ),
+                        HBox(
+                            [
+                                self.widgets["cmap"],
+                                self.widgets["log"],
+                            ]
+                        ),
+                        HBox(
+                            [
+                                self.widgets["range"],
+                            ]
+                        ),
+                        self.widgets["output"],
+                    ],
+                    layout=box_layout1,
+                ),
+                VBox(
+                    [
+                        self.widgets["live"],
+                        self.widgets["scale"],
+                        self.widgets["autorange"],
+                    ],
+                    layout=box_layout2,
+                ),
+            ]
+        )
 
         display(self.widgets["layout"])
 

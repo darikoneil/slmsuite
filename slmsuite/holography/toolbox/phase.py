@@ -1,12 +1,14 @@
 """
 Repository of common analytic phase patterns.
 """
+
 import os
 import warnings
 import time
 import numpy as np
+
 try:
-    import cupy as cp   # type: ignore
+    import cupy as cp  # type: ignore
 except ImportError:
     cp = np
 from scipy import special
@@ -18,11 +20,15 @@ from slmsuite.holography.toolbox import _process_grid
 
 # Load CUDA code. This is used for cupy.RawKernels in this file and elsewhere.
 
+
 def _load_cuda():
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cuda.cu"), 'r') as file:
+    with open(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "cuda.cu"), "r"
+    ) as file:
         CUDA_KERNELS = file.read()
 
     return CUDA_KERNELS
+
 
 try:
     CUDA_KERNELS = _load_cuda()
@@ -31,6 +37,7 @@ except:
     CUDA_KERNELS = None
 
 # Basic gratings.
+
 
 def blaze(grid, vector=(0, 0)):
     r"""
@@ -114,9 +121,9 @@ def sinusoid(grid, vector=(0, 0), shift=0, a=np.pi, b=0):
     """
     if vector[0] == 0 and vector[1] == 0:
         (x_grid, _) = _process_grid(grid)
-        result = np.full_like(x_grid, (a-b)/2 * (1 + np.sin(shift)))
+        result = np.full_like(x_grid, (a - b) / 2 * (1 + np.sin(shift)))
     else:
-        result = (a-b)/2 * (1 + np.sin(blaze(grid, vector) + shift))
+        result = (a - b) / 2 * (1 + np.sin(blaze(grid, vector) + shift))
 
     # Add offset if provided.
     if b != 0:
@@ -125,7 +132,7 @@ def sinusoid(grid, vector=(0, 0), shift=0, a=np.pi, b=0):
     return result
 
 
-def binary(grid, vector=(0, 0), shift=0, a=np.pi, b=0, duty_cycle=.5):
+def binary(grid, vector=(0, 0), shift=0, a=np.pi, b=0, duty_cycle=0.5):
     r"""
     Returns a simple binary grating toward a given vector in :math:`k`-space.
 
@@ -177,25 +184,27 @@ def binary(grid, vector=(0, 0), shift=0, a=np.pi, b=0, duty_cycle=.5):
         (x_grid, _) = _process_grid(grid)
         phase = b
         if shift != 0:
-            if np.mod(shift, 2*np.pi) < (2 * np.pi * duty_cycle):
+            if np.mod(shift, 2 * np.pi) < (2 * np.pi * duty_cycle):
                 phase = a
         result = np.full(x_grid.shape, phase)
     elif vector[0] != 0 and vector[1] != 0:
-        pass    # xor the next case.
+        pass  # xor the next case.
     elif vector[0] == 0 or vector[1] == 0:
-        period = 1/np.sum(vector)
-        duty = period*duty_cycle
+        period = 1 / np.sum(vector)
+        duty = period * duty_cycle
 
         period_int = np.rint(period)
         duty_int = np.rint(duty)
 
-        if np.all(np.isclose(period, period_int)) and np.all(np.isclose(duty, duty_int)):
-            pass    # Future: speed optimization.
+        if np.all(np.isclose(period, period_int)) and np.all(
+            np.isclose(duty, duty_int)
+        ):
+            pass  # Future: speed optimization.
 
     # If we have not set result, then we have to use the slow np.mod option.
     if result is None:
         result = np.where(
-            np.mod(blaze(grid, vector) + shift, 2*np.pi) < (2 * np.pi * duty_cycle),
+            np.mod(blaze(grid, vector) + shift, 2 * np.pi) < (2 * np.pi * duty_cycle),
             b,
             a,
         )
@@ -204,6 +213,7 @@ def binary(grid, vector=(0, 0), shift=0, a=np.pi, b=0, duty_cycle=.5):
 
 
 # Basic lenses.
+
 
 def _parse_focal_length(f):
     """Helper function to parse focal length used by `lens` and `axicon`."""
@@ -215,7 +225,9 @@ def _parse_focal_length(f):
         if f.size != 2:
             raise ValueError("Expected two terms in focal list. Found {}.".format(f))
         if np.any(f == 0):
-            raise ValueError("Cannot interpret a focal length of zero. Found {}.".format(f))
+            raise ValueError(
+                "Cannot interpret a focal length of zero. Found {}.".format(f)
+            )
 
     return f
 
@@ -299,7 +311,7 @@ def axicon(grid, f=(np.inf, np.inf), w=None):
     w = _determine_source_radius(grid, w)
     f = _parse_focal_length(f)
 
-    angle = [w / f[0] / 2, w / f[1] / 2]    # Notice that this fraction is in radians.
+    angle = [w / f[0] / 2, w / f[1] / 2]  # Notice that this fraction is in radians.
 
     # Optimize phase construction based on context (for speed, to avoid sqrt, etc).
     if angle[0] == 0 and angle[1] == 0:
@@ -309,39 +321,42 @@ def axicon(grid, f=(np.inf, np.inf), w=None):
     elif angle[1] == 0:
         return (2 * np.pi * angle[0]) * np.abs(x_grid)
     else:
-        return (2 * np.pi) * np.sqrt(np.square(x_grid * angle[0]) + np.square(y_grid * angle[1]))
+        return (2 * np.pi) * np.sqrt(
+            np.square(x_grid * angle[0]) + np.square(y_grid * angle[1])
+        )
 
 
 # Zernike.
 
-ZERNIKE_INDEXING_DIMENSION = {"ansi" : 1, "noll" : 1, "fringe" : 1, "wyant" : 1, "radial" : 2}
+ZERNIKE_INDEXING_DIMENSION = {
+    "ansi": 1,
+    "noll": 1,
+    "fringe": 1,
+    "wyant": 1,
+    "radial": 2,
+}
 ZERNIKE_INDEXING = ZERNIKE_INDEXING_DIMENSION.keys()
 ZERNIKE_NAMES = [
     # Oth order
     "Piston",
-
     # 1st order
     "Vertical tilt",
     "Horizontal tilt",
-
     # 2nd order
     "Oblique astigmatism",
     "Defocus",
     "Vertical astigmatism",
-
     # 3rd order
     "Vertical trefoil",
     "Vertical coma",
     "Horizontal coma",
     "Oblique trefoil",
-
     # 4th order
     "Oblique quadrafoil",
     "Oblique secondary astigmatism",
     "Spherical aberration",
     "Vertical secondary astigmatism",
     "Vertical quadrafoil",
-
     # 5th order
     "Vertical pentafoil",
     "Vertical secondary trefoil",
@@ -349,7 +364,6 @@ ZERNIKE_NAMES = [
     "Horizontal secondary coma",
     "Oblique secondary trefoil",
     "Oblique pentafoil",
-
     # 6th order
     "Oblique hexafoil",
     "Oblique secondary quadrafoil",
@@ -427,7 +441,9 @@ def zernike_convert_index(indices, from_index="ansi", to_index="ansi"):
 
     dimension = ZERNIKE_INDEXING_DIMENSION[from_index]
 
-    indices = np.array(indices, dtype=int, copy=(False if np.__version__[0] == '1' else None))
+    indices = np.array(
+        indices, dtype=int, copy=(False if np.__version__[0] == "1" else None)
+    )
     if indices.size == dimension:
         indices = indices.reshape((1, dimension))
     if dimension > 1 and indices.shape[1] != dimension:
@@ -438,22 +454,28 @@ def zernike_convert_index(indices, from_index="ansi", to_index="ansi"):
 
     # Convert all cases to radial indices n, l.
     if from_index == "radial":
-        n = indices[:,0]
-        l = indices[:,1]
+        n = indices[:, 0]
+        l = indices[:, 1]
     elif from_index == "noll" or to_index == "fringe" or from_index == "wyant":
         # Inverse functions have not been implemented.
-        raise NotImplementedError(f"from_index '{from_index}' is not supported currently.")
+        raise NotImplementedError(
+            f"from_index '{from_index}' is not supported currently."
+        )
     elif from_index == "ansi":
-        n = np.floor(.5 * np.sqrt(8*indices + 1) - .5).astype(int)
-        l = 2*indices - n*(n+2)
+        n = np.floor(0.5 * np.sqrt(8 * indices + 1) - 0.5).astype(int)
+        l = 2 * indices - n * (n + 2)
 
     # Error check n,l
     if np.any((n + l) % 2):
         raise ValueError(f"Invalid Zernike index n,l. n+l must be even. n={n}, l={l}.")
     if np.any(np.abs(l) > n):
-        raise ValueError(f"Invalid Zernike index n,l. |l| cannot be larger than n. n={n}, l={l}.")
+        raise ValueError(
+            f"Invalid Zernike index n,l. |l| cannot be larger than n. n={n}, l={l}."
+        )
     if np.any(n < 0):
-        raise ValueError(f"Invalid Zernike index n,l. n must be non-negative. n={n}, l={l}.")
+        raise ValueError(
+            f"Invalid Zernike index n,l. n must be non-negative. n={n}, l={l}."
+        )
 
     # Convert to the desired indices.
     if to_index == "radial":
@@ -465,7 +487,8 @@ def zernike_convert_index(indices, from_index="ansi", to_index="ansi"):
     elif to_index == "wyant" or to_index == "fringe":
         result = (
             np.square(1 + (n + np.abs(l)) / 2).astype(int)
-            - 2 * np.abs(l) + (l < 0)
+            - 2 * np.abs(l)
+            + (l < 0)
             - (to_index == "wyant")
         )
     elif to_index == "ansi":
@@ -560,7 +583,9 @@ def zernike_aperture(grid, aperture=None):
         elif aperture == "circular":
             x_scale = y_scale = 1 / np.amin([np.nanmax(x_grid), np.nanmax(y_grid)])
         elif aperture == "cropped":
-            x_scale = y_scale = 1 / np.sqrt(np.nanmax(np.square(x_grid) + np.square(y_grid)))
+            x_scale = y_scale = 1 / np.sqrt(
+                np.nanmax(np.square(x_grid) + np.square(y_grid))
+            )
         else:
             raise ValueError(f"Aperture '{aperture}' is not implemented.")
     elif np.isscalar(aperture):
@@ -602,7 +627,7 @@ def zernike(grid, index, weight=1, **kwargs):
     return zernike_sum(grid, (int(index),), (float(weight),), **kwargs)
 
 
-def zernike_get_string(index, derivative=(0,0)):
+def zernike_get_string(index, derivative=(0, 0)):
     r"""
     Returns a :math:`\LaTeX` string corresponding to the cartesian representation of the
     Zernike polynomial of the given index. The monomials are sorted in reverse Cantor order.
@@ -632,10 +657,10 @@ def zernike_get_string(index, derivative=(0,0)):
     if len(result) == 0:
         result = "0"
 
-    return result.strip("+")    # Remove potential leading +
+    return result.strip("+")  # Remove potential leading +
 
 
-def _zernike_get_cantor(indices, weights, derivative=(0,0)):
+def _zernike_get_cantor(indices, weights, derivative=(0, 0)):
     indices = np.array(indices)
     weights = np.array(weights)
 
@@ -651,20 +676,19 @@ def _zernike_get_cantor(indices, weights, derivative=(0,0)):
 
     # Grab the zernike-cantor transformation from the cache.
     _zernike_build_indices(indices)
-    zernike_cantor = _zernike_cache_vectorized[indices, :]   # (D, M)
+    zernike_cantor = _zernike_cache_vectorized[indices, :]  # (D, M)
     M = zernike_cantor.shape[1]
     cantor_indices = np.arange(M)
 
     # Remove vectors with all zeros.
-    nonzero = np.any(zernike_cantor, axis=0)    # Which D are nonzero for given m in M
-    cantor_indices = cantor_indices[nonzero]    # M -> M'
-    zernike_cantor = zernike_cantor[:, nonzero] # (D, M')
+    nonzero = np.any(zernike_cantor, axis=0)  # Which D are nonzero for given m in M
+    cantor_indices = cantor_indices[nonzero]  # M -> M'
+    zernike_cantor = zernike_cantor[:, nonzero]  # (D, M')
 
-    cantor_pairing = _inverse_cantor_pairing(cantor_indices)    # (M', 2)
+    cantor_pairing = _inverse_cantor_pairing(cantor_indices)  # (M', 2)
 
     # Differentiate the terms if needed.
     if np.any(derivative):
-
         for j in [0, 1]:
             if derivative[j] > 0:
                 power = cantor_pairing[:, [j]].T.astype(int)  # (D, 1)
@@ -677,7 +701,8 @@ def _zernike_get_cantor(indices, weights, derivative=(0,0)):
 
                     zernike_cantor[np.logical_not(nonzero)] = 0
                     zernike_cantor[nonzero] *= (
-                        special.factorial(power[nonzero]) / special.factorial(power[nonzero] - derivative[j])
+                        special.factorial(power[nonzero])
+                        / special.factorial(power[nonzero] - derivative[j])
                     ).astype(int)
 
                 # Reduce the power of the term
@@ -686,12 +711,16 @@ def _zernike_get_cantor(indices, weights, derivative=(0,0)):
                 zernike_cantor *= power >= derivative[j]
 
         # Remove terms with all zeros
-        nonzero = np.any(zernike_cantor, axis=0)        # Which D are nonzero for given m in M'
-        cantor_pairing = cantor_pairing[nonzero, :]     # M' -> M''
-        zernike_cantor = zernike_cantor[:, nonzero]     # (D, M'')
+        nonzero = np.any(
+            zernike_cantor, axis=0
+        )  # Which D are nonzero for given m in M'
+        cantor_pairing = cantor_pairing[nonzero, :]  # M' -> M''
+        zernike_cantor = zernike_cantor[:, nonzero]  # (D, M'')
 
     # Reshape the weights into this new basis.
-    cantor_weights = np.matmul(zernike_cantor.T, weights)  # (M' or M'', D) x (D, N) = (M' or M'', N)
+    cantor_weights = np.matmul(
+        zernike_cantor.T, weights
+    )  # (M' or M'', D) x (D, N) = (M' or M'', N)
 
     # Add in the negative indices.
     (M, N) = cantor_weights.shape
@@ -719,7 +748,9 @@ def _zernike_indices_parse(indices=None, D=None, smaller_okay=False):
             if not smaller_okay:
                 D = DD
         elif not ((smaller_okay and D <= DD) or D == DD):
-            raise ValueError(f"Expected data (dimension {D}) to have common size with indices (requested {DD}).")
+            raise ValueError(
+                f"Expected data (dimension {D}) to have common size with indices (requested {DD})."
+            )
 
         D = DD
 
@@ -731,25 +762,31 @@ def _zernike_indices_parse(indices=None, D=None, smaller_okay=False):
         if D is None:
             raise ValueError("Either dimension or indices must be defined.")
         elif D == 2:
-            indices = np.array([2,1])
+            indices = np.array([2, 1])
         elif D == 3:
-            indices = np.array([2,1,4])
+            indices = np.array([2, 1, 4])
         elif D == 4:
-            indices = np.array([2,1,4,3])
+            indices = np.array([2, 1, 4, 3])
         else:
-            indices = np.hstack((np.array([2,1,4,3]), np.arange(5, D+1)))
+            indices = np.hstack((np.array([2, 1, 4, 3]), np.arange(5, D + 1)))
 
     # Final checks.
     indices = np.ravel(indices)
     if indices.ndim == 0:
         indices = np.array([indices])
-    if D is not None and not ((smaller_okay and D <= len(indices)) or D == len(indices)):
-        raise ValueError(f"Expected data (dimension {D}) to have common size with indices (length {len(indices)}).")
+    if D is not None and not (
+        (smaller_okay and D <= len(indices)) or D == len(indices)
+    ):
+        raise ValueError(
+            f"Expected data (dimension {D}) to have common size with indices (length {len(indices)})."
+        )
 
     return indices
 
 
-def zernike_sum(grid, indices, weights, aperture=None, use_mask=True, derivative=(0,0), out=None):
+def zernike_sum(
+    grid, indices, weights, aperture=None, use_mask=True, derivative=(0, 0), out=None
+):
     r"""
     Returns a summation of
     `Zernike polynomials <https://en.wikipedia.org/wiki/Zernike_polynomials>`_
@@ -867,7 +904,9 @@ def zernike_sum(grid, indices, weights, aperture=None, use_mask=True, derivative
         if D is None or len(weights) == D:
             weights = np.reshape(weights, (-1, 1))
         else:
-            raise ValueError("Expected weights to have a common dimension with indices.")
+            raise ValueError(
+                "Expected weights to have a common dimension with indices."
+            )
     elif weights.ndim == 2:
         pass
     else:
@@ -901,10 +940,14 @@ def zernike_sum(grid, indices, weights, aperture=None, use_mask=True, derivative
         y_grid_scaled = y_grid[mask] * y_scale
     else:
         # Special case to avoid copying grids in the case of no scaling.
-        if x_scale == 1:    x_grid_scaled = x_grid
-        else:               x_grid_scaled = x_grid * x_scale
-        if y_scale == 1:    y_grid_scaled = y_grid
-        else:               y_grid_scaled = y_grid * y_scale
+        if x_scale == 1:
+            x_grid_scaled = x_grid
+        else:
+            x_grid_scaled = x_grid * x_scale
+        if y_scale == 1:
+            y_grid_scaled = y_grid
+        else:
+            y_grid_scaled = y_grid * y_scale
 
     # Gather the Zernike information.
     cantor_terms, cantor_weights = _zernike_get_cantor(indices, weights, derivative)
@@ -916,14 +959,14 @@ def zernike_sum(grid, indices, weights, aperture=None, use_mask=True, derivative
             grid=(x_grid_scaled, y_grid_scaled),
             weights=cantor_weights,
             terms=cantor_terms,
-            out=out[:, mask]
+            out=out[:, mask],
         )
     else:
         out = polynomial(
             grid=(x_grid_scaled, y_grid_scaled),
             weights=cantor_weights,
             terms=cantor_terms,
-            out=out
+            out=out,
         )
 
     if N == 1:
@@ -933,14 +976,14 @@ def zernike_sum(grid, indices, weights, aperture=None, use_mask=True, derivative
 
 
 def zernike_pyramid_plot(
-        grid,
-        order,
-        scale=1,
-        titles=["ansi", "radial", "latex", "name"],
-        cmap="twilight_shifted",
-        noborder=False,
-        **kwargs
-    ):
+    grid,
+    order,
+    scale=1,
+    titles=["ansi", "radial", "latex", "name"],
+    cmap="twilight_shifted",
+    noborder=False,
+    **kwargs,
+):
     r"""
     Plots :meth:`.zernike()` on a pyramid of subplots corresponding to the radial and
     azimuthal order. The user can resize the figure with ``plt.figure()`` beforehand
@@ -973,8 +1016,10 @@ def zernike_pyramid_plot(
     """
     order = int(order + 1)
     indices_ansi = np.arange((order * (order + 1)) // 2)
-    indices_radial = zernike_convert_index(indices_ansi, from_index="ansi", to_index="radial")
-    derivative = kwargs["derivative"] if "derivative" in kwargs else (0,0)
+    indices_radial = zernike_convert_index(
+        indices_ansi, from_index="ansi", to_index="radial"
+    )
+    derivative = kwargs["derivative"] if "derivative" in kwargs else (0, 0)
 
     # Get the pitch of the subplots for later.
     a1 = plt.subplot(order, order, 1)
@@ -1000,7 +1045,7 @@ def zernike_pyramid_plot(
         indices_ansi[np.newaxis, :],
         np.diag(np.ones_like(indices_ansi)),
         out=phases,
-        **kwargs
+        **kwargs,
     )
 
     axes = []
@@ -1009,7 +1054,7 @@ def zernike_pyramid_plot(
         n, l = indices_radial[i, :]
         m = (n + l) // 2
 
-        a = plt.subplot(order, order, 1 + m + n*order)
+        a = plt.subplot(order, order, 1 + m + n * order)
         axes.append(a)
 
         # Plot the phase.
@@ -1025,7 +1070,7 @@ def zernike_pyramid_plot(
         if "latex" in titles:
             latex = zernike_get_string(i, derivative)
             title += "$" + latex + "$\n"
-        if derivative == (0,0) and "name" in titles and i < len(ZERNIKE_NAMES):
+        if derivative == (0, 0) and "name" in titles and i < len(ZERNIKE_NAMES):
             title += ZERNIKE_NAMES[i]
 
         plt.title(title.strip("\n"))
@@ -1043,15 +1088,13 @@ def zernike_pyramid_plot(
         n, l = indices_radial[i, :]
         m = (n + l) // 2
 
-        dx = .5 * (order - 1 - n)
+        dx = 0.5 * (order - 1 - n)
         box = a.get_position()
         box = box.translated(dx * pitch, 0)
         a.set_position(box)
 
 
-def _zernike_overlap(
-    grid, indices, aperture=None, use_mask=True
-):
+def _zernike_overlap(grid, indices, aperture=None, use_mask=True):
     r"""
     **(Incomplete)**
 
@@ -1077,7 +1120,6 @@ def _zernike_overlap(
     else:
         source = np.ones_like(x_grid)
 
-
     result = np.diag(len(indices))
 
     functions = zernike_sum(
@@ -1092,11 +1134,12 @@ def _zernike_overlap(
 
     return result
 
+
 def _zernike_cache_plot():
-    plt.figure(figsize=(10,10))
+    plt.figure(figsize=(10, 10))
     plt.imshow(np.log2(_zernike_cache_vectorized))
-    plt.ylabel("Zernike Index (ANSI)");
-    plt.xlabel("Monomial Index (Cantor)");
+    plt.ylabel("Zernike Index (ANSI)")
+    plt.xlabel("Monomial Index (Cantor)")
 
 
 # Old style dictionary.     {(n,m) : {(nx, ny) : w, ... }, ... }
@@ -1108,7 +1151,7 @@ _zernike_cache_vectorized = np.array([[]], dtype=int)
 
 def _zernike_build_order(n):
     """Pre-caches Zernike polynomial coefficients up to order :math:`n`."""
-    N = (n+1) * (n+2) // 2
+    N = (n + 1) * (n + 2) // 2
     for i in range(N):
         _zernike_coefficients(i)
 
@@ -1135,13 +1178,13 @@ def _zernike_coefficients(index):
         l = -l
 
         # Define helper variables.
-        if l % 2:   # If even
+        if l % 2:  # If even
             q = int((abs(l) - 1) / 2)
         else:
             if l > 0:
-                q = int(abs(l)/2 - 1)
+                q = int(abs(l) / 2 - 1)
             else:
-                q = int(abs(l)/2)
+                q = int(abs(l) / 2)
 
         if l <= 0:
             p = 0
@@ -1149,27 +1192,26 @@ def _zernike_coefficients(index):
             p = 1
 
         l = abs(l)
-        m = int((n-l)/2)
+        m = int((n - l) / 2)
 
         # Helper function
         def comb(n, k):
-            return factorial(n) / (factorial(k) * factorial(n-k))
+            return factorial(n) / (factorial(k) * factorial(n - k))
 
         # Finding the coefficients is a summed combinatorial search.
         # This is why we cache: so we don't have to do this many times,
         # especially for higher order polynomials and the corresponding cubic scaling.
-        for i in range(q+1):
-            for j in range(m+1):
-                for k in range(m-j+1):
+        for i in range(q + 1):
+            for j in range(m + 1):
+                for k in range(m - j + 1):
                     factor = -1 if (i + j) % 2 else 1
                     factor *= comb(l, 2 * i + p)
                     factor *= comb(m - j, k)
-                    factor *= (
-                        float(factorial(n - j))
-                        / (factorial(j) * factorial(m - j) * factorial(n - m - j))
+                    factor *= float(factorial(n - j)) / (
+                        factorial(j) * factorial(m - j) * factorial(n - m - j)
                     )
 
-                    power_key = (int(n - 2*(i + j + k) - p), int(2 * (i + k) + p))
+                    power_key = (int(n - 2 * (i + j + k) - p), int(2 * (i + k) + p))
 
                     # Add this coefficient to the element in the dictionary
                     # corresponding to the right power.
@@ -1186,7 +1228,9 @@ def _zernike_coefficients(index):
         }
 
         # If we need to, enlarge the vector cache.
-        N = (n+1) * (n+2) // 2      # The Zernike order determines the size of the cache.
+        N = (
+            (n + 1) * (n + 2) // 2
+        )  # The Zernike order determines the size of the cache.
         global _zernike_cache_vectorized
 
         if _zernike_cache_vectorized.shape[1] < N:
@@ -1194,9 +1238,9 @@ def _zernike_coefficients(index):
                 _zernike_cache_vectorized,
                 (
                     (0, N - _zernike_cache_vectorized.shape[0]),
-                    (0, N - _zernike_cache_vectorized.shape[1])
+                    (0, N - _zernike_cache_vectorized.shape[1]),
                 ),
-                constant_values=0
+                constant_values=0,
             )
 
         # Update the vectorized dict.
@@ -1205,7 +1249,6 @@ def _zernike_coefficients(index):
             _zernike_cache_vectorized[index, cantor_index] = factor
 
     return _zernike_cache[index]
-
 
 
 def _zernike_populate_basis_map(indices):
@@ -1225,8 +1268,12 @@ def _zernike_populate_basis_map(indices):
         _zernike_coefficients(i)
 
     # Determine the cantor indices.
-    nonzero_cantor_indices = np.any(_zernike_cache_vectorized[zernike_indices, :], axis=0)
-    cantor_indices = np.arange(len(nonzero_cantor_indices), dtype=int)[nonzero_cantor_indices]
+    nonzero_cantor_indices = np.any(
+        _zernike_cache_vectorized[zernike_indices, :], axis=0
+    )
+    cantor_indices = np.arange(len(nonzero_cantor_indices), dtype=int)[
+        nonzero_cantor_indices
+    ]
 
     M = len(cantor_indices)
 
@@ -1239,30 +1286,32 @@ def _zernike_populate_basis_map(indices):
 
     # Reinsert the other cases.
     if len(other_indices) > 0:
-        pxy_m = np.pad(pxy_m, ((0, len(other_indices)), (0,0)))
-        pxy_m[len(zernike_indices):, 0] = other_indices     # Other indices go into nx.
+        pxy_m = np.pad(pxy_m, ((0, len(other_indices)), (0, 0)))
+        pxy_m[len(zernike_indices) :, 0] = other_indices  # Other indices go into nx.
 
     # Populate the results.
-    c_md = _zernike_cache_vectorized[zernike_indices, :][:, cantor_indices[msort]].T.astype(np.float32)
+    c_md = _zernike_cache_vectorized[zernike_indices, :][
+        :, cantor_indices[msort]
+    ].T.astype(np.float32)
     i_md = np.full((M, D), -1, dtype=np.int32)
 
     darange = np.arange(len(zernike_indices))
 
     for m in msort:
         nonzero = darange[c_md[m, :] != 0]
-        i_md[m, :len(nonzero)] = nonzero
+        i_md[m, : len(nonzero)] = nonzero
 
     return c_md, i_md, pxy_m.T
 
 
 try:
-    _zernike_test_kernel = cp.RawKernel(CUDA_KERNELS, 'zernike_test')
+    _zernike_test_kernel = cp.RawKernel(CUDA_KERNELS, "zernike_test")
 except:
     _zernike_test_kernel = None
 
 
 def _zernike_test(grid, indices):
-    _zernike_test_kernel = cp.RawKernel(_load_cuda(), 'zernike_test')
+    _zernike_test_kernel = cp.RawKernel(_load_cuda(), "zernike_test")
 
     c_md, i_md, pxy_m = _zernike_populate_basis_map(indices)
 
@@ -1271,14 +1320,22 @@ def _zernike_test(grid, indices):
     scale = 1
     if hasattr(grid, "get_source_zernike_scaling"):
         scale = grid.get_source_zernike_scaling()
-    x_grid = cp.array(x_grid * scale, copy=(False if np.__version__[0] == '1' else None), dtype=np.float32)
-    y_grid = cp.array(y_grid * scale, copy=(False if np.__version__[0] == '1' else None), dtype=np.float32)
+    x_grid = cp.array(
+        x_grid * scale,
+        copy=(False if np.__version__[0] == "1" else None),
+        dtype=np.float32,
+    )
+    y_grid = cp.array(
+        y_grid * scale,
+        copy=(False if np.__version__[0] == "1" else None),
+        dtype=np.float32,
+    )
 
     (H, W) = x_grid.shape
-    WH = int(W*H)
+    WH = int(W * H)
     (M, D) = c_md.shape
 
-    out = cp.empty((D,H,W), dtype=np.float32)
+    out = cp.empty((D, H, W), dtype=np.float32)
 
     threads_per_block = int(_zernike_test_kernel.max_threads_per_block)
     blocks = WH // threads_per_block
@@ -1288,14 +1345,16 @@ def _zernike_test(grid, indices):
         (blocks,),
         (threads_per_block,),
         (
-            WH, D, M,
-            cp.array(c_md.ravel(), copy=(False if np.__version__[0] == '1' else None)),
-            cp.array(i_md.ravel(), copy=(False if np.__version__[0] == '1' else None)),
-            cp.array(pxy_m.ravel(), copy=(False if np.__version__[0] == '1' else None)),
+            WH,
+            D,
+            M,
+            cp.array(c_md.ravel(), copy=(False if np.__version__[0] == "1" else None)),
+            cp.array(i_md.ravel(), copy=(False if np.__version__[0] == "1" else None)),
+            cp.array(pxy_m.ravel(), copy=(False if np.__version__[0] == "1" else None)),
             x_grid.ravel(),
             y_grid.ravel(),
-            out.ravel()
-        )
+            out.ravel(),
+        ),
     )
 
     return out
@@ -1303,13 +1362,18 @@ def _zernike_test(grid, indices):
 
 # Polynomials.
 
+
 def _cantor_pairing(xy):
     """
     Converts a 2D index to a unique 1D index according to the
     `Cantor pairing function <https://en.wikipedia.org/wiki/Pairing_function>`.
     """
-    xy = np.array(xy, dtype=int, copy=(False if np.__version__[0] == '1' else None)).reshape((-1, 2))
-    return np.rint(.5 * (xy[:,0] + xy[:,1]) * (xy[:,0] + xy[:,1] + 1) + xy[:,1]).astype(int)
+    xy = np.array(
+        xy, dtype=int, copy=(False if np.__version__[0] == "1" else None)
+    ).reshape((-1, 2))
+    return np.rint(
+        0.5 * (xy[:, 0] + xy[:, 1]) * (xy[:, 0] + xy[:, 1] + 1) + xy[:, 1]
+    ).astype(int)
 
 
 def _inverse_cantor_pairing(z):
@@ -1319,15 +1383,15 @@ def _inverse_cantor_pairing(z):
 
     Returns shape ``(D, 2)``
     """
-    z = np.array(z, dtype=int, copy=(False if np.__version__[0] == '1' else None))
+    z = np.array(z, dtype=int, copy=(False if np.__version__[0] == "1" else None))
     if z.ndim != 1:
         raise ValueError("Expected a list of shape (D,)")
 
-    w = np.floor((np.sqrt(8*z + 1) - 1) // 2).astype(int)
-    t = (w*w + w) // 2
+    w = np.floor((np.sqrt(8 * z + 1) - 1) // 2).astype(int)
+    t = (w * w + w) // 2
 
-    y = z-t
-    x = w-y
+    y = z - t
+    x = w - y
 
     # Handle negative index case which is used for special indices.
     y[z < 0] = 0
@@ -1360,7 +1424,7 @@ def _term_pathing(xy):
         Array of shape ``(M,)``. Best coefficient order.
     """
     # Prepare helper variables.
-    xy = np.array(xy, dtype=int, copy=(False if np.__version__[0] == '1' else None))
+    xy = np.array(xy, dtype=int, copy=(False if np.__version__[0] == "1" else None))
 
     order = np.sum(xy, axis=1)
     delta = np.squeeze(np.diff(xy, axis=1))
@@ -1385,17 +1449,19 @@ def _term_pathing(xy):
         do = order[cantor_index[i0]] - order
 
         # Find the best candidate for the next index in the thread.
-        nearest = -cantor + np.where((np.abs(dd) > do) + (do <= 0) + (cantor < 0), np.inf, 0)
+        nearest = -cantor + np.where(
+            (np.abs(dd) > do) + (do <= 0) + (cantor < 0), np.inf, 0
+        )
         i = np.argmin(nearest[cantor_index])
 
         # Either exit or continue this thread.
         if cantor[cantor_index[i]] != -1:
-            return recurse(i, j0-1)
+            return recurse(i, j0 - 1)
         else:
-            return j0-1
+            return j0 - 1
 
     # Traverse backwards through the array,
-    j = len(I)-1
+    j = len(I) - 1
     for i in range(len(order)):
         if cantor[cantor_index[i]] >= 0 and j >= 0:
             j = recurse(i, j)
@@ -1474,7 +1540,9 @@ def polynomial(grid, weights, terms=None, pathing=None, out=None):
         terms = _inverse_cantor_pairing(terms)
 
     if terms.shape[1] != 2:
-        raise ValueError("Terms must be of shape (D, 2) or (D,). Found {}.".format(terms.shape))
+        raise ValueError(
+            "Terms must be of shape (D, 2) or (D,). Found {}.".format(terms.shape)
+        )
 
     D = terms.shape[0]
 
@@ -1484,10 +1552,14 @@ def polynomial(grid, weights, terms=None, pathing=None, out=None):
         if len(weights) == D:
             weights = np.reshape(weights, (-1, 1))
         else:
-            raise ValueError("Expected weights to have a common dimension with indices.")
+            raise ValueError(
+                "Expected weights to have a common dimension with indices."
+            )
     elif weights.ndim == 2:
         if weights.shape[0] != D:
-            raise ValueError("Expected weights to have a common dimension with indices.")
+            raise ValueError(
+                "Expected weights to have a common dimension with indices."
+            )
     else:
         raise ValueError("Expected weights to be 1D or 2D.")
 
@@ -1519,7 +1591,7 @@ def polynomial(grid, weights, terms=None, pathing=None, out=None):
     for index in pathing:
         (nx, ny) = terms[index, :]
 
-        if nx >= 0:                     # Usual case: monomial.
+        if nx >= 0:  # Usual case: monomial.
             # Reset if we're starting a new path.
             if nx - nx0 < 0 or ny - ny0 < 0:
                 nx0 = ny0 = 0
@@ -1540,7 +1612,7 @@ def polynomial(grid, weights, terms=None, pathing=None, out=None):
             for i in range(N):
                 if weights[index, i] != 0:
                     out[i, ...] += weights[index, i] * monomial
-        elif nx == -1 and ny == 0:      # Special case: vortex waveplate.
+        elif nx == -1 and ny == 0:  # Special case: vortex waveplate.
             if xp.iscomplexobj(x_grid):
                 lg = xp.arctan2(xp.real(y_grid), xp.real(x_grid))
             else:
@@ -1556,6 +1628,7 @@ def polynomial(grid, weights, terms=None, pathing=None, out=None):
 
 
 # Structured light.
+
 
 def _determine_source_radius(grid, w=None):
     r"""
@@ -1649,7 +1722,9 @@ def laguerre_gaussian(grid, l, p=0, w=None):
     if l != 0:
         canvas += l * theta_grid
     if p != 0:
-        canvas += np.pi * np.heaviside(-special.genlaguerre(p, np.abs(l))(16 * rr_grid / w / w), 0)
+        canvas += np.pi * np.heaviside(
+            -special.genlaguerre(p, np.abs(l))(16 * rr_grid / w / w), 0
+        )
 
     return canvas
 
@@ -1738,10 +1813,10 @@ def ince_gaussian(grid, p, m, parity=1, ellipticity=1, w=None):
 
     if parity == 1:
         if not 0 <= m <= p:
-            raise ValueError("{} is an invalid Ince polynomial.".format((p,m)))
+            raise ValueError("{} is an invalid Ince polynomial.".format((p, m)))
     else:
         if not 1 <= m <= p:
-            raise ValueError("{} is an invalid Ince polynomial.".format((p,m)))
+            raise ValueError("{} is an invalid Ince polynomial.".format((p, m)))
 
     complex_grid = x_grid + 1j * y_grid
 

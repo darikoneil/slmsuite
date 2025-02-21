@@ -22,12 +22,14 @@ from slmsuite.hardware.cameras.camera import Camera
 
 try:
     import vmbpy
+
     vimba_system = vmbpy.VmbSystem
     vimba_name = "vmbpy"
 
 except ImportError:
     try:
         import vimba
+
         vimba_system = vimba.Vimba
         vimba_name = "vimba"
 
@@ -35,7 +37,9 @@ except ImportError:
     except ImportError:
         vimba_system = None
         vimba_name = ""
-        warnings.warn("vimba or vmbpy are not installed. Install to use AlliedVision cameras.")
+        warnings.warn(
+            "vimba or vmbpy are not installed. Install to use AlliedVision cameras."
+        )
 
 
 class AlliedVision(Camera):
@@ -85,7 +89,9 @@ class AlliedVision(Camera):
             See :meth:`.Camera.__init__` for permissible options.
         """
         if vimba_system is None:
-            raise ImportError("vimba or vmbpy are not installed. Install to use AlliedVision cameras.")
+            raise ImportError(
+                "vimba or vmbpy are not installed. Install to use AlliedVision cameras."
+            )
 
         if AlliedVision.sdk is None:
             if verbose:
@@ -183,7 +189,9 @@ class AlliedVision(Camera):
             List of AlliedVision serial numbers.
         """
         if vimba_system is None:
-            raise ImportError("vimba or vmbpy are not installed. Install to use AlliedVision cameras.")
+            raise ImportError(
+                "vimba or vmbpy are not installed. Install to use AlliedVision cameras."
+            )
 
         if AlliedVision.sdk is None:
             AlliedVision.sdk = vimba_system.get_instance()

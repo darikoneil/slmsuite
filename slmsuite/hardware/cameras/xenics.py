@@ -4,6 +4,7 @@ Hardware control for Xenics camera via the :mod:`Xeneth` interface.
 Python wrapper for Xenith C++ SDK 2.7 from Xenics; see xeneth-sdk.chm
 there for additional documentation.
 """
+
 import time
 from ctypes import *
 
@@ -314,13 +315,8 @@ class Cheetah640(Camera):
     ### Camera Interface ###
 
     def __init__(
-            self,
-            virtual=False,
-            temperature=None,
-            pitch_um=(20,20),
-            verbose=True,
-            **kwargs
-        ):
+        self, virtual=False, temperature=None, pitch_um=(20, 20), verbose=True, **kwargs
+    ):
         """
         Initialize camera. Default ``profile`` is ``'free'``.
 
@@ -381,7 +377,7 @@ class Cheetah640(Camera):
                 bitdepth=12,
                 pitch_um=pitch_um,
                 name=name,
-                **kwargs
+                **kwargs,
             )
 
             # Initialize a 16-bit buffer for a single frame; initialize to 0
@@ -1217,15 +1213,11 @@ class Cheetah640(Camera):
         if (woi[0]) % min_w_factor:
             woi[0] = max([woi[0] - woi[0] % min_w_factor, 0])
         if (woi[1] - woi[0] + 1) % min_w_factor:
-            woi[1] = (
-                woi[1] + min_w_factor - (woi[1] - woi[0]) % min_w_factor
-            )
+            woi[1] = woi[1] + min_w_factor - (woi[1] - woi[0]) % min_w_factor
         if (woi[2]) % min_h_factor:
             woi[2] = max([woi[2] - woi[2] % min_h_factor, 0])
         if (woi[3] - woi[2] + 1) % min_h_factor:
-            woi[3] = (
-                woi[3] + min_h_factor - (woi[3] - woi[2]) % min_h_factor
-            )
+            woi[3] = woi[3] + min_h_factor - (woi[3] - woi[2]) % min_h_factor
 
         # Set new WOI
         for i, prop in enumerate(woi_prop):
@@ -1371,7 +1363,9 @@ class Cheetah640(Camera):
                     return im
         return -1
 
-    def _get_image_hw(self, timeout_s=None, frame_type=FT_NATIVE, block=True, convert=True):
+    def _get_image_hw(
+        self, timeout_s=None, frame_type=FT_NATIVE, block=True, convert=True
+    ):
         """
         Main grabbing function; captures latest image into single frame buffer.
 

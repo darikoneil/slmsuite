@@ -6,17 +6,9 @@ from setuptools import setup
 
 NAME = "slmsuite"
 VERSION = "0.2.1"
-DEPENDENCIES = [
-    "numpy",
-    "scipy",
-    "opencv-python",
-    "matplotlib",
-    "h5py",
-    "tqdm"
-]
+DEPENDENCIES = ["numpy", "scipy", "opencv-python", "matplotlib", "h5py", "tqdm"]
 DESCRIPTION = (
-    "Package for high-performance spatial light "
-    "modulator (SLM) control and holography."
+    "Package for high-performance spatial light modulator (SLM) control and holography."
 )
 AUTHOR = "slmsuite developers"
 AUTHOR_EMAIL = "qp-slm@mit.edu"

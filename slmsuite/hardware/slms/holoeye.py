@@ -2,6 +2,7 @@
 **(NotImplemented)** Hardware control for Holoeye SLMs.
 This is a partial skeleton that can be completed if desired.
 """
+
 import os
 import warnings
 from .slm import SLM
@@ -11,6 +12,7 @@ try:  # Load Holoeye's SDK module.
 except ImportError:
     slmdisplaysdk = None
     warnings.warn("slmdisplaysdk not installed. Install to use Holoeye slms.")
+
 
 class Holoeye(SLM):
     """
@@ -24,13 +26,7 @@ class Holoeye(SLM):
         Path of the Blink SDK folder.
     """
 
-    def __init__(
-        self,
-        verbose=True,
-        wav_um=1,
-        pitch_um=(8,8),
-        **kwargs
-    ):
+    def __init__(self, verbose=True, wav_um=1, pitch_um=(8, 8), **kwargs):
         r"""
         Initialize SLM and attributes.
 
@@ -50,27 +46,35 @@ class Holoeye(SLM):
         See the other implemented SLM subclasses for examples.
         """
         if slmdisplaysdk is None:
-            raise ImportError("slmdisplaysdk not installed. Install to use Holoeye slms.")
+            raise ImportError(
+                "slmdisplaysdk not installed. Install to use Holoeye slms."
+            )
 
         # Get the SLM.
-        if verbose: print("Creating SLM instance...", end="")
+        if verbose:
+            print("Creating SLM instance...", end="")
         self.slm_lib = slmdisplaysdk.SLMInstance()  # ?
         # self.slm_lib = slmdisplaysdk.SLMDisplay() # ?
 
         # Check version somehow.
         if self.slm_lib.requiresVersion(3):
-            if verbose: print("failure")
+            if verbose:
+                print("failure")
             raise RuntimeError("TODO")
-        if verbose: print("success")
+        if verbose:
+            print("success")
 
         # Open the SLM.
-        if verbose: print("Opening SLM...", end="")
+        if verbose:
+            print("Opening SLM...", end="")
         error = self.slm_lib.open()
 
         if error != slmdisplaysdk.ErrorCode.NoError:
-            if verbose: print("failure")
+            if verbose:
+                print("failure")
             self._handle_error(error)
-        if verbose: print("success")
+        if verbose:
+            print("success")
 
         # Other possibilities to consider:
         # - Setting the SLM's operating wavelength (wav_um).
@@ -87,7 +91,7 @@ class Holoeye(SLM):
             bitdepth=self.slm_lib.depth(),
             wav_um=wav_um,
             pitch_um=pitch_um,
-            **kwargs
+            **kwargs,
         )
 
         # Zero the display using the superclass `set_phase()` function.
@@ -114,10 +118,12 @@ class Holoeye(SLM):
             List of serial numbers or identifiers.
         """
         if slmdisplaysdk is None:
-            raise ImportError("slmdisplaysdk not installed. Install to use Holoeye slms.")
+            raise ImportError(
+                "slmdisplaysdk not installed. Install to use Holoeye slms."
+            )
 
         raise NotImplementedError()
-        serial_list = get_serial_list()     # TODO: Fill in proper function.
+        serial_list = get_serial_list()  # TODO: Fill in proper function.
         return serial_list
 
     def _set_phase_hw(self, phase):

@@ -4,6 +4,7 @@ Consider also installing Basler software for testing cameras outside of python
 (see `downloads <https://www.baslerweb.com/en/downloads/software-downloads/#type=pylonsoftware;language=all;version=7.3.0>`_).
 Install :mod:`pypylon` by following the `provided instructions <https://github.com/basler/pypylon>`_.
 """
+
 import warnings
 from slmsuite.hardware.cameras.camera import Camera
 
@@ -65,7 +66,7 @@ class Basler(Camera):
 
         serial_list = [dev.GetSerialNumber() for dev in device_list]
         if serial == "":
-            if len(device_list)==0:
+            if len(device_list) == 0:
                 raise RuntimeError("No cameras found by pylon.")
             if len(device_list) > 1 and verbose:
                 print("No serial given... Choosing first of ", serial_list)
@@ -80,7 +81,7 @@ class Basler(Camera):
                 )
 
         if verbose:
-            print("pylon sn " "{}" " initializing... ".format(serial), end="")
+            print("pylon sn {} initializing... ".format(serial), end="")
         self.cam = pylon.InstantCamera()
         # TODO: ichr modified this to be compatible with arbitrary serials (not just
         # first), also camera is opened at the start.
@@ -91,28 +92,28 @@ class Basler(Camera):
         self.cam.BinningHorizontal.SetValue(1)
         self.cam.BinningVertical.SetValue(1)
 
-        self.cam.GainAuto.SetValue('Off')
-        self.cam.ExposureAuto.SetValue('Off')
-        self.cam.ExposureMode.SetValue('Timed')
+        self.cam.GainAuto.SetValue("Off")
+        self.cam.ExposureAuto.SetValue("Off")
+        self.cam.ExposureMode.SetValue("Timed")
 
-        self.cam.AcquisitionMode.SetValue('SingleFrame')
+        self.cam.AcquisitionMode.SetValue("SingleFrame")
 
-        self.cam.TriggerSelector.SetValue('FrameStart')
-        self.cam.TriggerMode.SetValue('Off')
+        self.cam.TriggerSelector.SetValue("FrameStart")
+        self.cam.TriggerMode.SetValue("Off")
 
-        self.cam.TriggerActivation.SetValue('RisingEdge')
-        self.cam.TriggerSource.SetValue('Software')
+        self.cam.TriggerActivation.SetValue("RisingEdge")
+        self.cam.TriggerSource.SetValue("Software")
 
         # TODO: ichr moved this from .get_image() to here. Does this work?
         self.cam.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
 
         # Initialize the superclass attributes.
         super().__init__(
-            (self.cam.SensorWidth(), self.cam.SensorHeight()), #pixels
-            bitdepth=self.cam.PixelSize.GetIntValue(), #bits
+            (self.cam.SensorWidth(), self.cam.SensorHeight()),  # pixels
+            bitdepth=self.cam.PixelSize.GetIntValue(),  # bits
             pitch_um=pitch_um,
             name=serial,
-            **kwargs
+            **kwargs,
         )
 
         if verbose:
@@ -128,7 +129,7 @@ class Basler(Camera):
             Does nothing, as the ``pylon.TlFactory`` instance stored in :attr:`sdk`
             does not appear to need to be closed.
         """
-        #self.cam.__exit__(None, None, None) weird
+        # self.cam.__exit__(None, None, None) weird
         self.cam.StopGrabbing()
         self.cam.Close()
 
@@ -156,7 +157,7 @@ class Basler(Camera):
 
         if Basler.sdk is None:
             Basler.sdk = pylon.TlFactory.GetInstance()
-            #Basler.sdk.__enter__()
+            # Basler.sdk.__enter__()
             close_sdk = True
         else:
             close_sdk = False
@@ -166,9 +167,9 @@ class Basler(Camera):
         serial_list = [cam.GetSerialNumber() for cam in camera_list]
 
         if verbose:
-            print('Basler cameras:')
+            print("Basler cameras:")
             for serial in serial_list:
-                print("\"{}\"".format(serial))
+                print('"{}"'.format(serial))
 
         if close_sdk:
             Basler.close_sdk()
@@ -177,17 +178,17 @@ class Basler(Camera):
 
     @classmethod
     def close_sdk(cls):
-        """"
+        """ "
         Close the :mod:'pylon' instance.
         """
         if cls.sdk is not None:
-            #cls.sdk.__exit__(None, None, None)
+            # cls.sdk.__exit__(None, None, None)
             cls.sdk = None
 
     ### Property Configuration ###
 
     def get_properties(self, properties=None):
-        """"
+        """ "
         Print the list of camera properties.
 
         Parameters
@@ -200,7 +201,7 @@ class Basler(Camera):
             properties = self.cam.__dict__.keys()
 
         for key in properties:
-            prop=self.cam.__dict__[key]
+            prop = self.cam.__dict__[key]
             try:
                 print(prop.get_name(), end="\t")
             except BaseException as e:
@@ -255,11 +256,11 @@ class Basler(Camera):
 
     def _get_exposure_hw(self):
         """See :meth:`.Camera._get_exposure_hw`."""
-        return float(self.cam.ExposureTime.GetValue()) / 1e6   # in seconds
+        return float(self.cam.ExposureTime.GetValue()) / 1e6  # in seconds
 
     def _set_exposure_hw(self, exposure_s):
         """See :meth:`.Camera._set_exposure_hw`."""
-        self.cam.ExposureTime.SetValue(float(1e6 * exposure_s))   # in seconds
+        self.cam.ExposureTime.SetValue(float(1e6 * exposure_s))  # in seconds
 
     def set_woi(self, woi=None):
         """See :meth:`.Camera.set_woi`."""
@@ -272,13 +273,15 @@ class Basler(Camera):
         # timeout_s is now used. _get_image_hw is the new subclass hardware method.
         self.cam.WaitForFrameTriggerReady(200, pylon.TimeoutHandling_ThrowException)
         self.cam.ExecuteSoftwareTrigger()
-        grab = self.cam.RetrieveResult(int(timeout_s*1000), pylon.TimeoutHandling_Return)
+        grab = self.cam.RetrieveResult(
+            int(timeout_s * 1000), pylon.TimeoutHandling_Return
+        )
 
         # Image grabbed successfully?
         if not grab.GrabSucceeded():
             raise RuntimeError("Basler error: ", grab.ErrorCode, grab.ErrorDescription)
 
-        im = grab.GetArray()    # This returns an np.array
+        im = grab.GetArray()  # This returns an np.array
         # TODO: ichr added Release(); does this work?
         grab.Release()
         return im
