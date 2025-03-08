@@ -17,75 +17,45 @@ Color camera functionality is not currently implemented, and will lead to undefi
 import time
 import numpy as np
 import warnings
+from typing import Any
 
 from slmsuite.hardware.cameras.camera import Camera
 
 try:
     import vmbpy
+
     vimba_system = vmbpy.VmbSystem
     vimba_name = "vmbpy"
-
 except ImportError:
     try:
         import vimba
+
         vimba_system = vimba.Vimba
         vimba_name = "vimba"
-
         warnings.warn("vmbpy not installed; falling back to vimba")
     except ImportError:
         vimba_system = None
         vimba_name = ""
-        warnings.warn("vimba or vmbpy are not installed. Install to use AlliedVision cameras.")
+        warnings.warn(
+            "vimba or vmbpy are not installed. Install to use AlliedVision cameras."
+        )
 
 
 class AlliedVision(Camera):
-    r"""
-    AlliedVision camera.
+    sdk: vmbpy.VmbSystem | vimba.Vimba | None = None
+    cam: vmbpy.Camera | vimba.Camera
 
-    Attributes
-    ----------
-    sdk : vmbpy.Vimba
-        AlliedVision SDK. Shared among instances of :class:`AlliedVision`.
-    cam : vmbpy.Camera
-        Object to talk with the desired camera.
-
-    Caution
-    ~~~~~~~~
-    The AlliedVision SDK :mod:`vmbpy` includes protections to maintain camera connectivity:
-    specifically, the SDK :class:`vmbpy.VmbSystem` and cameras :class:`vmbpy.Camera` are designed
-    to be used in concert with ``with`` statements. Unfortunately, this does not mesh with the
-    architecture of :mod:`slmsuite`, where notebook-style operation is desired.
-    Using ``with`` statements inside :class:`.AlliedVision` methods is likewise not an option,
-    as the methods to :meth:`__enter__()` and :meth:`__exit__()` the ``with`` are time-consuming
-    due to calls to :meth:`_open()` and :meth:`_close()` the objects, to the point of
-    :math:`\mathcal{O}(\text{s})` overhead. :class:`.AlliedVision` disables these protections by
-    calling :meth:`__enter__()` and :meth:`__exit__()` directly during :meth:`.__init__()` and
-    :meth:`.close()`, instead of inside ``with`` statements.
-    """
-
-    sdk = None
-
-    def __init__(self, serial="", pitch_um=None, verbose=True, **kwargs):
-        """
-        Initialize camera and attributes.
-
-        Parameters
-        ----------
-        serial : str
-            Serial number of the camera to open.
-            Use :meth:`.info()` to see detected options.
-            If empty, defaults to the first camera in the list
-            returned by :meth:`vmbpy.get_all_cameras()`.
-        pitch_um : (float, float) OR None
-            Fill in extra information about the pixel pitch in ``(dx_um, dy_um)`` form
-            to use additional calibrations.
-        verbose : bool
-            Whether or not to print extra information.
-        **kwargs
-            See :meth:`.Camera.__init__` for permissible options.
-        """
+    def __init__(
+        self,
+        serial: str = "",
+        pitch_um: tuple[float, float] | None = None,
+        verbose: bool = True,
+        **kwargs: Any,
+    ) -> None:
         if vimba_system is None:
-            raise ImportError("vimba or vmbpy are not installed. Install to use AlliedVision cameras.")
+            raise ImportError(
+                "vimba or vmbpy are not installed. Install to use AlliedVision cameras."
+            )
 
         if AlliedVision.sdk is None:
             if verbose:
@@ -131,13 +101,9 @@ class AlliedVision(Camera):
             pass  # Some cameras do not have the option to set binning.
 
         self.cam.GainAuto.set("Off")
-
         self.cam.ExposureAuto.set("Off")
         self.cam.ExposureMode.set("Timed")
-
         self.cam.AcquisitionMode.set("SingleFrame")
-
-        # Future: triggered instead of SingleFrame.
         self.cam.TriggerSelector.set("AcquisitionStart")
         self.cam.TriggerMode.set("Off")
         self.cam.TriggerActivation.set("RisingEdge")
@@ -151,39 +117,18 @@ class AlliedVision(Camera):
             **kwargs,
         )
 
-    def close(self, close_sdk=True):
-        """
-        See :meth:`.Camera.close`
-
-        Parameters
-        ----------
-        close_sdk : bool
-            Whether or not to close the :mod:`vmbpy` instance.
-        """
+    def close(self, close_sdk: bool = True) -> None:
         self.cam.__exit__(None, None, None)
-
         if close_sdk:
             self.close_sdk()
-
         del self.cam
 
     @staticmethod
-    def info(verbose=True):
-        """
-        Discovers all Thorlabs scientific cameras.
-
-        Parameters
-        ----------
-        verbose : bool
-            Whether to print the discovered information.
-
-        Returns
-        --------
-        list of str
-            List of AlliedVision serial numbers.
-        """
+    def info(verbose: bool = True) -> list[str]:
         if vimba_system is None:
-            raise ImportError("vimba or vmbpy are not installed. Install to use AlliedVision cameras.")
+            raise ImportError(
+                "vimba or vmbpy are not installed. Install to use AlliedVision cameras."
+            )
 
         if AlliedVision.sdk is None:
             AlliedVision.sdk = vimba_system.get_instance()
@@ -206,26 +151,12 @@ class AlliedVision(Camera):
         return serial_list
 
     @classmethod
-    def close_sdk(cls):
-        """
-        Close the :mod:`vmbpy` instance.
-        """
+    def close_sdk(cls) -> None:
         if cls.sdk is not None:
             cls.sdk.__exit__(None, None, None)
             cls.sdk = None
 
-    ### Property Configuration ###
-
-    def get_properties(self, properties=None):
-        """
-        Print the list of camera properties.
-
-        Parameters
-        ----------
-        properties : dict or None
-            The target camera's property dictionary. If ``None``, the property
-            dictionary is fetched from the camera associated with the calling instance.
-        """
+    def get_properties(self, properties: dict | None = None) -> None:
         if properties is None:
             properties = self.cam.__dict__.keys()
 
@@ -252,17 +183,8 @@ class AlliedVision(Camera):
             except:
                 print("")
 
-    def set_adc_bitdepth(self, bitdepth):
-        """
-        Set the digitization bitdepth.
-
-        Parameters
-        ----------
-        bitdepth : int
-            Desired digitization bitdepth.
-        """
+    def set_adc_bitdepth(self, bitdepth: int) -> None:
         bitdepth = int(bitdepth)
-
         for entry in self.cam.SensorBitDepth.get_all_entries():
             value = entry.as_tuple()  # (name : str, value : int)
             if str(bitdepth) in value[0]:
@@ -270,45 +192,25 @@ class AlliedVision(Camera):
                 break
             raise RuntimeError(f"ADC bitdepth {bitdepth} not found.")
 
-    def get_adc_bitdepth(self):
-        """
-        Get the digitization bitdepth.
-
-        Returns
-        -------
-        int
-            The digitization bitdepth.
-        """
+    def get_adc_bitdepth(self) -> int:
         value = str(self.cam.SensorBitDepth.get())
         bitdepth = int("".join(char for char in value if char.isdigit()))
         return bitdepth
 
-    def _get_exposure_hw(self):
-        """See :meth:`.Camera._get_exposure_hw`."""
+    def _get_exposure_hw(self) -> float:
         return float(self.cam.ExposureTime.get()) / 1e6
 
-    def _set_exposure_hw(self, exposure_s):
-        """See :meth:`.Camera._set_exposure_hw`."""
+    def _set_exposure_hw(self, exposure_s: float) -> None:
         self.cam.ExposureTime.set(float(exposure_s * 1e6))
 
-    def set_woi(self, woi=None):
-        """See :meth:`.Camera.set_woi`."""
+    def set_woi(self, woi: Any = None) -> None:
         return
 
-    def _get_image_hw(self, timeout_s):
-        """See :meth:`.Camera._get_image_hw`."""
+    def _get_image_hw(self, timeout_s: float) -> np.ndarray:
         t = time.time()
-
-        # Convert timeout_s to ms
         frame = self.cam.get_frame(timeout_ms=int(1e3 * timeout_s))
         frame = frame.as_numpy_ndarray()
-
-        # We have noticed that sometimes the camera gets into a state where
-        # it returns a frame of all zeros apart from one pixel with value of 31.
-        # This method is admittedly a hack to try getting a frame a few more times.
-        # We welcome contributions to fix this.
         while np.sum(frame) == np.amax(frame) == 31 and time.time() - t < timeout_s:
             frame = self.cam.get_frame(timeout_ms=int(1e3 * timeout_s))
             frame = frame.as_numpy_ndarray()
-
         return np.squeeze(frame)

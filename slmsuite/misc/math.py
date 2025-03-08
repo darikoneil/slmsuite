@@ -19,12 +19,10 @@ REAL_TYPES = (
     *FLOAT_TYPES,
 )
 
-SCALAR_TYPES =  (
-    *REAL_TYPES,
-    complex
-)
+SCALAR_TYPES = (*REAL_TYPES, complex)
 
-def iseven(x):
+
+def iseven(x: int) -> bool:
     """
     Test if an integer is even.
 

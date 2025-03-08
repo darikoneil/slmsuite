@@ -8,6 +8,7 @@ Note
 ~~~~
 Color camera functionality is not currently implemented, and will lead to undefined behavior.
 """
+
 import warnings
 from slmsuite.hardware.cameras.camera import Camera
 
@@ -16,6 +17,7 @@ try:
 except:
     ICamera = None
     warnings.warn("pylablib not installed. Install to use PyLabLib cameras.")
+
 
 class PyLabLib(Camera):
     """
@@ -56,7 +58,9 @@ class PyLabLib(Camera):
            If the camera can not be reached.
         """
         if ICamera is None:
-            raise ImportError("pylablib not installed. Install to use PyLabLib cameras.")
+            raise ImportError(
+                "pylablib not installed. Install to use PyLabLib cameras."
+            )
 
         if not isinstance(cam, ICamera):
             raise ValueError(
@@ -79,20 +83,24 @@ class PyLabLib(Camera):
         name = name.strip("_")
         if len(name) == 0:
             name = "pylablibcamera"
-        name = kwargs.pop("name", name) # info["device_info"].model + "_" + info["device_info"].serial_number)
+        name = kwargs.pop(
+            "name", name
+        )  # info["device_info"].model + "_" + info["device_info"].serial_number)
 
-        if verbose: print(f"Cam {name} parsing... ", end="")
+        if verbose:
+            print(f"Cam {name} parsing... ", end="")
         height, width = cam.get_data_dimensions()
         self.cam = cam
 
         super().__init__(
             (width, height),
-            bitdepth=8,         # Currently defaults to 8 because pylablib doesn't cache this. Update in the future, maybe.
+            bitdepth=8,  # Currently defaults to 8 because pylablib doesn't cache this. Update in the future, maybe.
             pitch_um=pitch_um,  # Currently unset because pylablib doesn't cache this. Update in the future, maybe.
             name=name,
-            **kwargs
+            **kwargs,
         )
-        if verbose: print("success")
+        if verbose:
+            print("success")
 
     def close(self):
         """

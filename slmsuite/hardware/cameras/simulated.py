@@ -12,7 +12,6 @@ except:
     cp = np
     from scipy.ndimage import map_coordinates
 
-import matplotlib.pyplot as plt
 
 from slmsuite.hardware.cameras.camera import Camera
 from slmsuite.holography.algorithms import Hologram
@@ -69,7 +68,17 @@ class SimulatedCamera(Camera):
 
     """
 
-    def __init__(self, slm, resolution=None, M=None, b=None, noise=None, pitch_um=None, gain=1, **kwargs):
+    def __init__(
+        self,
+        slm,
+        resolution=None,
+        M=None,
+        b=None,
+        noise=None,
+        pitch_um=None,
+        gain=1,
+        **kwargs,
+    ):
         """
         Initialize simulated camera.
 
@@ -164,8 +173,8 @@ class SimulatedCamera(Camera):
 
         # Fourier space must be sufficiently padded to resolve the camera pixels.
         dkxy = np.sqrt(
-            (self.grid[0][:2, :2] - self.grid[0][0, 0]) ** 2 +
-            (self.grid[1][:2, :2] - self.grid[1][0, 0]) ** 2
+            (self.grid[0][:2, :2] - self.grid[0][0, 0]) ** 2
+            + (self.grid[1][:2, :2] - self.grid[1][0, 0]) ** 2
         )
         dkxy_min = dkxy.ravel()[1:].min()
 
@@ -182,14 +191,18 @@ class SimulatedCamera(Camera):
         # Convert kxy -> knm (0,0 at corner): 1/dx -> Npx
         self.knm_cam = cp.array(
             [
-                self.shape_padded[0] * self._slm.pitch[1] * self.grid[1] + self.shape_padded[0] / 2,
-                self.shape_padded[1] * self._slm.pitch[1] * self.grid[0] + self.shape_padded[1] / 2,
+                self.shape_padded[0] * self._slm.pitch[1] * self.grid[1]
+                + self.shape_padded[0] / 2,
+                self.shape_padded[1] * self._slm.pitch[1] * self.grid[0]
+                + self.shape_padded[1] / 2,
             ]
         )
 
         if (
-            cp.amax(cp.abs(self.knm_cam[0] - self.shape_padded[0]/2)) > self.shape_padded[1]/2 or
-            cp.amax(cp.abs(self.knm_cam[1] - self.shape_padded[1]/2)) > self.shape_padded[0]/2
+            cp.amax(cp.abs(self.knm_cam[0] - self.shape_padded[0] / 2))
+            > self.shape_padded[1] / 2
+            or cp.amax(cp.abs(self.knm_cam[1] - self.shape_padded[1] / 2))
+            > self.shape_padded[0] / 2
         ):
             warnings.warn(
                 "Camera extends beyond the accessible SLM k-space;"
@@ -197,13 +210,13 @@ class SimulatedCamera(Camera):
             )
 
     def build_affine(
-            self,
-            f_eff,
-            units="norm",
-            theta=0,
-            shear_angle=0,
-            offset=None,
-        ):
+        self,
+        f_eff,
+        units="norm",
+        theta=0,
+        shear_angle=0,
+        offset=None,
+    ):
         """
         Builds an affine transform defining the SLM to camera transformation as
         detailed in :meth:`~slmsuite.hardware.cameraslms.FourierSLM.kxyslm_to_ijcam`.
@@ -261,14 +274,14 @@ class SimulatedCamera(Camera):
 
     @staticmethod
     def _build_affine(
-            f_eff,
-            units="ij",
-            theta=0,
-            shear_angle=0,
-            offset=(0,0),
-            cam_pitch_um=None,
-            wav_um=None,
-        ):
+        f_eff,
+        units="ij",
+        theta=0,
+        shear_angle=0,
+        offset=(0, 0),
+        cam_pitch_um=None,
+        wav_um=None,
+    ):
         """
         See documentation in :meth:`build_affine()` and
         :meth:`~slmsuite.hardware.cameraslms.FourierSLM.build_fourier_calibration()`.
@@ -284,7 +297,7 @@ class SimulatedCamera(Camera):
         if isinstance(shear_angle, REAL_TYPES):
             shear_angle = [shear_angle, shear_angle]
         if offset is None:
-            offset = (0,0)
+            offset = (0, 0)
 
         f_eff = np.squeeze(f_eff).astype(float)
         shear_angle = np.squeeze(shear_angle)
@@ -309,7 +322,9 @@ class SimulatedCamera(Camera):
 
         mag = np.array([[f_eff[0], 0], [0, f_eff[1]]])
         shear = np.array([[1, np.tan(shear_angle[0])], [np.tan(shear_angle[1]), 1]])
-        rot = np.array([[np.cos(-theta), np.sin(-theta)], [-np.sin(-theta), np.cos(-theta)]])
+        rot = np.array(
+            [[np.cos(-theta), np.sin(-theta)], [-np.sin(-theta), np.cos(-theta)]]
+        )
 
         M = mag @ shear @ rot
         b = toolbox.format_2vectors(offset)
@@ -371,9 +386,17 @@ class SimulatedCamera(Camera):
         # self._hologram.reset_phase(self._slm.phase + self._slm.source["phase_sim"])
 
         # Quantized phase
-        self._hologram.amp = cp.array(self._slm.source["amplitude_sim"], dtype=self._hologram.dtype)
-        phase = -self._slm.display.astype(self._hologram.dtype) * (2 * np.pi / self._slm.bitresolution)
-        self._hologram.reset_phase(phase - phase.min() + self._slm.source["phase_sim"].astype(self._hologram.dtype))
+        self._hologram.amp = cp.array(
+            self._slm.source["amplitude_sim"], dtype=self._hologram.dtype
+        )
+        phase = -self._slm.display.astype(self._hologram.dtype) * (
+            2 * np.pi / self._slm.bitresolution
+        )
+        self._hologram.reset_phase(
+            phase
+            - phase.min()
+            + self._slm.source["phase_sim"].astype(self._hologram.dtype)
+        )
 
         ff = self._hologram.get_farfield(get=False)
 
@@ -392,19 +415,22 @@ class SimulatedCamera(Camera):
         # Basic noise sources.
         if self.noise is not None:
             for key in self.noise.keys():
-                if key == 'dark':
+                if key == "dark":
                     # Background/dark current - exposure dependent
-                    dark = self.noise['dark'](np.ones_like(img) * self.bitresolution) / self.exposure_s
+                    dark = (
+                        self.noise["dark"](np.ones_like(img) * self.bitresolution)
+                        / self.exposure_s
+                    )
                     img = img + dark
-                elif key == 'read':
+                elif key == "read":
                     # Readout noise - exposure independent
-                    read = self.noise['read'](np.ones_like(img) * self.bitresolution)
+                    read = self.noise["read"](np.ones_like(img) * self.bitresolution)
                     img = img + read
                 else:
-                    raise RuntimeError('Unknown noise source %s specified!'%(key))
+                    raise RuntimeError("Unknown noise source %s specified!" % (key))
 
         # Truncate to maximum readout value
-        img[img > self.bitresolution-1] = self.bitresolution-1
+        img[img > self.bitresolution - 1] = self.bitresolution - 1
 
         # Quantize: all power in one pixel (img=1) -> maximum readout value at base exposure=1
         # img = np.rint(img)

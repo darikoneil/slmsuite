@@ -1,6 +1,7 @@
 """
 Projects data onto the SLM's virtual display, using the :mod:`pyglet` library.
 """
+
 import warnings
 import numpy as np
 
@@ -12,6 +13,7 @@ try:
 except ImportError:
     pyglet = None
     warnings.warn("pyglet not installed. Install to use ScreenMirrored SLMs.")
+
 
 class ScreenMirrored(SLM):
     """
@@ -96,14 +98,14 @@ class ScreenMirrored(SLM):
     """
 
     def __init__(
-            self,
-            display_number,
-            bitdepth=8,
-            wav_um=1,
-            pitch_um=(8,8),
-            verbose=True,
-            **kwargs
-        ):
+        self,
+        display_number,
+        bitdepth=8,
+        wav_um=1,
+        pitch_um=(8, 8),
+        verbose=True,
+        **kwargs,
+    ):
         """
         Initializes a :mod:`pyglet` window for displaying data to an SLM.
 
@@ -142,7 +144,9 @@ class ScreenMirrored(SLM):
             See :meth:`.SLM.__init__` for permissible options.
         """
         if pyglet is None:
-            raise ImportError("pyglet not installed. Install to use ScreenMirrored SLMs.")
+            raise ImportError(
+                "pyglet not installed. Install to use ScreenMirrored SLMs."
+            )
 
         if verbose:
             print("Initializing pyglet... ", end="")
@@ -150,19 +154,22 @@ class ScreenMirrored(SLM):
         screens = display.get_screens()
         if verbose:
             print("success")
-            print("Searching for window with display_number={}... "
-                    .format(display_number), end="")
+            print(
+                f"Searching for window with display_number={display_number}... ",
+                end="",
+            )
 
         if len(screens) <= display_number:
-            raise ValueError("Could not find display_number={}; only {} displays"
-                .format(display_number, len(screens)))
+            raise ValueError(
+                f"Could not find display_number={display_number}; only {len(screens)} displays"
+            )
 
         screen_info = ScreenMirrored.info(verbose=False)
 
         if screen_info[display_number][3]:
             raise ValueError(
-                "ScreenMirrored window already created on display_number={}"
-                .format(display_number))
+                f"ScreenMirrored window already created on display_number={display_number}"
+            )
 
         if verbose and screen_info[display_number][2]:
             print("warning: this is the main display... ", end="")
@@ -178,7 +185,7 @@ class ScreenMirrored(SLM):
             bitdepth=bitdepth,
             wav_um=wav_um,
             pitch_um=pitch_um,
-            **kwargs
+            **kwargs,
         )
 
         self.window = _Window(None, screen, self.name)
@@ -196,8 +203,8 @@ class ScreenMirrored(SLM):
         # Warn the user if wav_um > wav_design_um
         if self.phase_scaling > 1:
             print(
-                "Warning: Wavelength {} um is inaccessible to this SLM with "
-                "design wavelength {} um".format(self.wav_um, self.wav_design_um)
+                f"Warning: Wavelength {self.wav_um} um is inaccessible to this SLM with "
+                f"design wavelength {self.wav_design_um} um"
             )
 
     def _set_phase_hw(self, data):
@@ -205,9 +212,9 @@ class ScreenMirrored(SLM):
         # Write to buffer (.buffer points to the same data as .cbuffer).
         # Unfortunately, OpenGL2.0 needs the data copied three times (I think).
         # FUTURE: For OpenGL3.0 and pyglet 2.0+, use the shader to minimize data transfer.
-        np.copyto(self.window.buffer[:,:,0], data)
-        np.copyto(self.window.buffer[:,:,1], data)
-        np.copyto(self.window.buffer[:,:,2], data)
+        np.copyto(self.window.buffer[:, :, 0], data)
+        np.copyto(self.window.buffer[:, :, 1], data)
+        np.copyto(self.window.buffer[:, :, 2], data)
 
         self.window.render()
 
@@ -231,6 +238,8 @@ class ScreenMirrored(SLM):
             The number, geometry of each display.
         """
         if pyglet is None:
-            raise ImportError("pyglet not installed. Install to use ScreenMirrored SLMs.")
+            raise ImportError(
+                "pyglet not installed. Install to use ScreenMirrored SLMs."
+            )
 
         return _Window.info(verbose=verbose)

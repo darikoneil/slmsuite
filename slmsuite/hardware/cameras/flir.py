@@ -8,6 +8,7 @@ Warning
 ~~~~~~~~
 Implementation unfinished and untested. Consider using ``simple_pyspin`` as a dependency instead.
 """
+
 import warnings
 
 from .camera import Camera
@@ -80,7 +81,7 @@ class FLIR(Camera):
             bitdepth=int(self.cam.PixelSize.get()),
             pitch_um=pitch_um,
             name=serial,
-            **kwargs
+            **kwargs,
         )
         if verbose:
             print("success")

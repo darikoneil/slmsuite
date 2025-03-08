@@ -7,6 +7,7 @@ Note
 Check that the Blink SDK, including DLL files etc, are in the default folder
 or otherwise pass the correct directory in the constructor.
 """
+
 import os
 import ctypes
 import warnings
@@ -14,6 +15,7 @@ import warnings
 from .slm import SLM
 
 DEFAULT_SDK_PATH = "C:\\Program Files\\Meadowlark Optics\\Blink 1920 HDMI\\"
+
 
 class Meadowlark(SLM):
     """
@@ -33,8 +35,8 @@ class Meadowlark(SLM):
         sdk_path=DEFAULT_SDK_PATH,
         lut_path=None,
         wav_um=1,
-        pitch_um=(8,8),
-        **kwargs
+        pitch_um=(8, 8),
+        **kwargs,
     ):
         r"""
         Initializes an instance of a Meadowlark SLM.
@@ -71,22 +73,27 @@ class Meadowlark(SLM):
             See :meth:`.SLM.__init__` for permissible options.
         """
         # Validates the DPI awareness of this context, which is presumably important for scaling.
-        if verbose: print("Validating DPI awareness...", end="")
+        if verbose:
+            print("Validating DPI awareness...", end="")
 
         awareness = ctypes.c_int()
-        error_get = ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(awareness))
+        error_get = ctypes.windll.shcore.GetProcessDpiAwareness(
+            0, ctypes.byref(awareness)
+        )
         error_set = ctypes.windll.shcore.SetProcessDpiAwareness(2)
         success = ctypes.windll.user32.SetProcessDPIAware()
 
         if not success:
             raise RuntimeError(
                 "Meadowlark failed to validate DPI awareness. "
-                "Errors: get={}, set={}, awareness={}".format(error_get, error_set, awareness.value)
+                f"Errors: get={error_get}, set={error_set}, awareness={awareness.value}"
             )
-        if verbose: print("success")
+        if verbose:
+            print("success")
 
         # Open the SLM library
-        if verbose: print("Constructing Blink SDK...", end="")
+        if verbose:
+            print("Constructing Blink SDK...", end="")
 
         dll_path = os.path.join(sdk_path, "SDK", "Blink_C_wrapper")
         try:
@@ -112,15 +119,18 @@ class Meadowlark(SLM):
         # self.slm_lib.SetPreRampSlope(20) # default is 7
         # self.slm_lib.SetPostRampSlope(24) # default is 24
 
-        if verbose: print("success")
+        if verbose:
+            print("success")
 
         # Load LUT.
-        if verbose: print("Loading LUT file...", end="")
+        if verbose:
+            print("Loading LUT file...", end="")
 
         try:
             true_lut_path = self.load_lut(lut_path)
         except RuntimeError as e:
-            if verbose: print("failure\n(could not find .lut file)")
+            if verbose:
+                print("failure\n(could not find .lut file)")
             raise e
         else:
             if verbose and true_lut_path != lut_path:
@@ -133,7 +143,7 @@ class Meadowlark(SLM):
             name=kwargs.pop("name", "Meadowlark"),
             wav_um=wav_um,
             pitch_um=pitch_um,
-            **kwargs
+            **kwargs,
         )
 
         if self.bitdepth > 8:
@@ -180,7 +190,7 @@ class Meadowlark(SLM):
         # If we already have a .lut file, proceed.
         if len(lut_path) > 4 and lut_path[-4:] == ".lut":
             pass
-        else:   # Otherwise, treat the path like a folder and search inside the folder.
+        else:  # Otherwise, treat the path like a folder and search inside the folder.
             lut_file = None
 
             for file in os.listdir(lut_path):
@@ -199,9 +209,7 @@ class Meadowlark(SLM):
             if lut_file is not None:
                 lut_path = os.path.join(lut_path, lut_file)
             else:
-                raise RuntimeError(
-                    f"Could not find a .lut file at path '{lut_path}'"
-                )
+                raise RuntimeError(f"Could not find a .lut file at path '{lut_path}'")
 
         # Finally, load the lookup table.
         self.slm_lib.Load_lut(lut_path)
@@ -242,7 +250,7 @@ class Meadowlark(SLM):
         """
         self.slm_lib.Write_image(
             display.ctypes.data_as(ctypes.POINTER(ctypes.c_ubyte)),
-            ctypes.c_uint(self.bitdepth == 8)   # Is 8-bit
+            ctypes.c_uint(self.bitdepth == 8),  # Is 8-bit
         )
 
     ### Additional Meadowlark-specific functionality

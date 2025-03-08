@@ -30,6 +30,7 @@ DEFAULT_DLL_PATH = (
     "Interfaces\\SDK\\Native Toolkit\\dlls\\Native_"
 )
 
+
 def _configure_tlcam_dll_path(dll_path=DEFAULT_DLL_PATH):
     """
     Adds Thorlabs camera DLLs to the DLL path.
@@ -41,8 +42,8 @@ def _configure_tlcam_dll_path(dll_path=DEFAULT_DLL_PATH):
     dll_path : str
         Full path to the Thorlabs camera DLLs.
     """
-    if DEFAULT_DLL_PATH == dll_path:
-        is_64bits = sys.maxsize > 2 ** 32
+    if dll_path == DEFAULT_DLL_PATH:
+        is_64bits = sys.maxsize > 2**32
 
         if is_64bits:
             dll_path += "64_lib"
@@ -53,13 +54,14 @@ def _configure_tlcam_dll_path(dll_path=DEFAULT_DLL_PATH):
         try:
             os.add_dll_directory(dll_path)
         except:
-            if DEFAULT_DLL_PATH == dll_path:
+            if dll_path == DEFAULT_DLL_PATH:
                 warnings.warn(
-                    f"thorlabs_tsi_sdk DLLs not found at default path. "
+                    "thorlabs_tsi_sdk DLLs not found at default path. "
                     "Resolve to use Thorlabs cameras.\nDefault path: '{DEFAULT_DLL_PATH}'"
                 )
     else:
         os.environ["PATH"] = dll_path + os.pathsep + os.environ["PATH"]
+
 
 _configure_tlcam_dll_path()
 
@@ -114,7 +116,9 @@ class ThorCam(Camera):
            If the camera can not be reached.
         """
         if TLCameraSDK is None:
-            raise ImportError("thorlabs_tsi_sdk not installed. Install to use Thorlabs cameras.")
+            raise ImportError(
+                "thorlabs_tsi_sdk not installed. Install to use Thorlabs cameras."
+            )
 
         if ThorCam.sdk is None:
             if verbose:
@@ -165,9 +169,10 @@ class ThorCam(Camera):
             bitdepth=self.cam.bit_depth,
             pitch_um=(self.cam.sensor_pixel_width_um, self.cam.sensor_pixel_height_um),
             name=serial,
-            **kwargs
+            **kwargs,
         )
-        if verbose: print("success")
+        if verbose:
+            print("success")
 
     def close(self, close_sdk=False):
         """
@@ -204,7 +209,9 @@ class ThorCam(Camera):
             List of ThorCam serial numbers.
         """
         if TLCameraSDK is None:
-            raise ImportError("thorlabs_tsi_sdk not installed. Install to use Thorlabs cameras.")
+            raise ImportError(
+                "thorlabs_tsi_sdk not installed. Install to use Thorlabs cameras."
+            )
 
         if ThorCam.sdk is None:
             try:
@@ -285,10 +292,12 @@ class ThorCam(Camera):
             woi = (
                 self.cam.roi_range.upper_left_x_pixels_min,
                 self.cam.roi_range.lower_right_x_pixels_max
-                - self.cam.roi_range.upper_left_x_pixels_min + 1,
+                - self.cam.roi_range.upper_left_x_pixels_min
+                + 1,
                 self.cam.roi_range.upper_left_y_pixels_min,
                 self.cam.roi_range.lower_right_y_pixels_max
-                - self.cam.roi_range.upper_left_y_pixels_min + 1,
+                - self.cam.roi_range.upper_left_y_pixels_min
+                + 1,
             )
 
         self.woi = woi
@@ -367,7 +376,7 @@ class ThorCam(Camera):
 
             self.profile = profile
 
-    def _get_image_hw(self, timeout_s=.1, trigger=True, grab=True, attempts=1):
+    def _get_image_hw(self, timeout_s=0.1, trigger=True, grab=True, attempts=1):
         """
         See :meth:`.Camera._get_image_hw`. By default ``trigger=True`` and ``grab=True`` which
         will result in blocking image acquisition.
@@ -445,9 +454,7 @@ class ThorCam(Camera):
 
         if verbose:
             print(
-                "Flushed {} frames in {:.2f} ms".format(
-                    ii, 1e3 * (time.perf_counter() - t)
-                )
+                f"Flushed {ii} frames in {1e3 * (time.perf_counter() - t):.2f} ms"
             )
 
     def is_capturing(self):
