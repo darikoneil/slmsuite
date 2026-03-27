@@ -36,7 +36,10 @@ BLAZE_LABELS = {
     "knm":  (r"$k_n$ [pix]", r"$k_m$ [pix]"),
     "freq": (r"$f_x$ [1/pix]", r"$f_y$ [1/pix]"),
     "lpmm": (r"$k_x/2\pi$ [1/mm]", r"$k_y/2\pi$ [1/mm]"),
-    "zernike":  (r"$Z_1^1$ [Zernike rad]", r"$Z_1^{-1}$ [Zernike rad]"),
+    "zernike": (
+        r"$x = Z_2 = Z_1^1$ [Zernike rad]",
+        r"$y = Z_1 = Z_1^{-1}$ [Zernike rad]"
+    ),
     "ij":   (r"Camera $i$ [pix]", r"Camera $j$ [pix]"),
 }
 for prefix, name in zip(["", "mag_"], ["Camera", "Experiment"]):
@@ -96,7 +99,7 @@ def convert_vector(vector, from_units="norm", to_units="norm", hardware=None, sh
         The small angle approximation is assumed.
 
     -  ``"norm"``, ``"kxy"``
-        Blaze :math:`k_x` normalized to wavenumber :math:`k`, i.e. :math:`\frac{k_x}{k}`.
+        Blaze :math:`k_x` normalized to wavenumber :math:`k = 2\pi/\lambda`, i.e. :math:`\frac{k_x}{k}`.
         Equivalent to radians ``"rad"`` in the small angle approximation.
         **This is the default** :mod:`slmsuite` **unit.**
 
@@ -110,6 +113,8 @@ def convert_vector(vector, from_units="norm", to_units="norm", hardware=None, sh
     -  ``"freq"``
         Pixel frequency of a grating producing the blaze.
         e.g. 1/16 is a grating with a period of 16 pixels.
+        Under these units, the edge of :math:`k`-space is at :math:`\pm 0.5`,
+        which makes it useful to program in fractions of the SLM's space.
 
     -  ``"lpmm"``
         Line pairs per mm or lines per mm of a grating producing the blaze.
@@ -251,7 +256,7 @@ def convert_vector(vector, from_units="norm", to_units="norm", hardware=None, sh
     if from_units in CAMERA_UNITS or to_units in CAMERA_UNITS:
         if cameraslm is None or not "fourier" in cameraslm.calibrations:
             warnings.warn(
-                f"CameraSLM must be passed to slm for conversion '{from_units}' to '{to_units}'"
+                f"CameraSLM must be passed as slm for conversion '{from_units}' to '{to_units}'"
             )
             return np.full_like(vector_parsed, np.nan)
 
@@ -296,7 +301,9 @@ def convert_vector(vector, from_units="norm", to_units="norm", hardware=None, sh
                 warnings.warn("shape or slm is required for unit 'knm'")
                 shape = (np.nan, np.nan)
             else:
-                shape = slm.shape
+                shape = np.array(slm.shape, dtype=float)
+        else:
+            shape = np.array(format_shape(shape), dtype=float)
 
         shape = format_2vectors(np.flip(np.squeeze(shape)))
 
@@ -329,8 +336,8 @@ def convert_vector(vector, from_units="norm", to_units="norm", hardware=None, sh
         rad = cameraslm.ijcam_to_kxyslm(vector_xy)
     elif from_units in CAMERA_UNITS:
         unit = from_units.split("_")[-1]
+        if "mag_" in from_units: vector_xy *= cameraslm.mag
         rad = cameraslm.ijcam_to_kxyslm(vector_xy * LENGTH_FACTORS[unit] / cam_pitch_um)
-        if "mag_" in from_units: rad *= cameraslm.mag
 
     # Convert from normalized "kxy" units to the desired xy output units.
     if to_units == "norm" or to_units == "kxy" or to_units == "rad":
@@ -486,7 +493,10 @@ def window_slice(window, shape=None, centered=False, circular=False):
     slice_ : (slice, slice) OR (array_like, array_like) OR (array_like)
         The slice for the window.
     """
-    # (v.x, w, v.y, h) format
+    if shape is not None:
+        shape = format_shape(shape)
+
+    # Case 1: (v.x, w, v.y, h) format
     if len(window) == 4:
         # Prepare helper vars
         xi = int(window[0] - ((window[1] - 2) / 2 if centered else 0))
@@ -518,7 +528,7 @@ def window_slice(window, shape=None, centered=False, circular=False):
             return window_slice((y_grid[mask_grid], x_grid[mask_grid]), shape=shape)
         else:  # Otherwise, return square slices in the python style.
             slice_ = (slice(yi, yf), slice(xi, xf))
-    # (y_ind, x_ind) format
+    # Case 2: (y_ind, x_ind) format
     elif len(window) == 2:
         # Prepare the lists
         y_ind = np.ravel(window[0])
@@ -527,7 +537,7 @@ def window_slice(window, shape=None, centered=False, circular=False):
             x_ind = np.clip(x_ind, 0, shape[1] - 1)
             y_ind = np.clip(y_ind, 0, shape[0] - 1)
         slice_ = (y_ind, x_ind)
-    # Boolean numpy array.
+    # Case 3: Boolean numpy array.
     elif np.ndim(window) == 2:
         slice_ = window
     else:
@@ -575,7 +585,7 @@ def window_extent(window, padding_frac=0, padding_pix=0):
             raise ValueError("Unrecognized format for `window`.")
 
         # Add padding if desired.
-        padding_ = int(np.floor(np.diff(limit) * padding_frac) + padding_pix)
+        padding_ = int((np.floor(np.diff(limit) * padding_frac) + padding_pix).item())
         limit += np.array([-padding_, padding_])
 
         # Clip the padding to shape.
@@ -1115,7 +1125,7 @@ def fit_3pt(y0, y1, y2, N=None, x0=(0, 0), x1=(1, 0), x2=(0, 1), orientation_che
 
 
 def smallest_distance(vectors, metric="chebyshev"):
-    """
+    r"""
     Returns the smallest distance between pairs of points under a given ``metric``.
 
     Tip
@@ -1139,7 +1149,7 @@ def smallest_distance(vectors, metric="chebyshev"):
         Defaults to ``"chebyshev"`` which corresponds to
         :meth:`scipy.spatial.distance.chebyshev()`.
         The :math:`\mathcal{O}(N\log(N))` divide and conquer algorithm is only
-        compatible with string inputs. allowed by :meth:`scipy.spatial.distance.pdist`.
+        compatible with string inputs allowed by :meth:`scipy.spatial.distance.pdist`.
         Function arguments will fallback to the brute force approach.
 
     Returns
@@ -1220,18 +1230,16 @@ def smallest_distance(vectors, metric="chebyshev"):
 def lloyds_algorithm(grid, vectors, iterations=10, plot=False):
     r"""
     Implements `Lloyd's Algorithm <https://en.wikipedia.org/wiki/Lloyd's_algorithm>`_
-    on a set of seed ``vectors`` to promote even vector spacing using the helper function
-    :meth:`~slmsuite.holography.toolbox.voronoi_windows()`.
-    This iteratively forces a set of ``vectors`` away from each other until
-    they become more evenly distributed over a space.
-    This function could be made much more computationally efficient by using analytic
-    methods to compute Voronoi cell area, rather than the current numerical approach.
+    on a set of seed ``vectors`` to promote even vector spacing.
+    Vectors are bound within the grid.
 
     Parameters
     ----------
     grid : (array_like, array_like) OR :class:`~slmsuite.hardware.slms.slm.SLM` OR (int, int)
+        Extract the rectangular bounds from a grid, or from a shape.
         See :meth:`~slmsuite.holography.toolbox.voronoi_windows()`.
     vectors : array_like
+        Initial seed points for Lloyd's Algorithm.
         See :meth:`~slmsuite.holography.toolbox.voronoi_windows()`.
     iterations : int
         Number of iterations to apply Lloyd's Algorithm.
@@ -1243,37 +1251,126 @@ def lloyds_algorithm(grid, vectors, iterations=10, plot=False):
     numpy.ndarray
         The result of Lloyd's Algorithm.
     """
-    result = np.copy(format_2vectors(vectors))
-    (x_grid, y_grid) = _process_grid(grid)
+    result = np.copy(format_2vectors(vectors)).astype(float)
+
+    # Parse grid
+    if isinstance(grid, (tuple, list)) and all(isinstance(x, int) for x in grid):
+        shape = grid
+    else:
+        x_grid, y_grid = _process_grid(grid)
+        shape = x_grid.shape
+    H, W = shape
+
+    def polygon_centroid(polygon):
+        x = polygon[:, 0]
+        y = polygon[:, 1]
+        x_shift = np.roll(x, -1)
+        y_shift = np.roll(y, -1)
+
+        cross = x * y_shift - x_shift * y
+        area = 0.5 * np.sum(cross)
+
+        if np.isclose(area, 0):
+            return 0, np.mean(polygon, axis=0)
+
+        cx = np.sum((x + x_shift) * cross) / (6 * area)
+        cy = np.sum((y + y_shift) * cross) / (6 * area)
+
+        return np.array([cx, cy])
+
+    def clip_polygon(polygon, edge_fn, intersect_fn):
+        clipped = []
+        prev = polygon[-1]
+
+        for curr in polygon:
+            if edge_fn(curr):
+                if not edge_fn(prev):
+                    clipped.append(intersect_fn(prev, curr))
+                clipped.append(curr)
+            elif edge_fn(prev):
+                clipped.append(intersect_fn(prev, curr))
+            prev = curr
+
+        return clipped
+
+    def clip_to_box(polygon):
+        def intersect(p1, p2, edge):
+            x1, y1 = p1
+            x2, y2 = p2
+            if edge == "left":
+                x = 0
+                y = y1 + (y2 - y1) * (0 - x1) / (x2 - x1)
+            elif edge == "right":
+                x = W
+                y = y1 + (y2 - y1) * (W - x1) / (x2 - x1)
+            elif edge == "bottom":
+                y = 0
+                x = x1 + (x2 - x1) * (0 - y1) / (y2 - y1)
+            elif edge == "top":
+                y = H
+                x = x1 + (x2 - x1) * (H - y1) / (y2 - y1)
+            return [x, y]
+
+        for edge, edge_fn, intersect_fn in [
+            ("left", lambda p: p[0] >= 0, lambda p1, p2: intersect(p1, p2, "left")),
+            ("right", lambda p: p[0] <= W, lambda p1, p2: intersect(p1, p2, "right")),
+            ("bottom", lambda p: p[1] >= 0, lambda p1, p2: intersect(p1, p2, "bottom")),
+            ("top", lambda p: p[1] <= H, lambda p1, p2: intersect(p1, p2, "top")),
+        ]:
+            polygon = clip_polygon(polygon, edge_fn, intersect_fn)
+            if not polygon:
+                break
+        return np.array(polygon)
 
     for _ in range(iterations):
-        windows = voronoi_windows(grid, result, plot=plot)
+        # Add points outside the shape to ensure bounded Voronoi cells
+        hsx = W / 2
+        hsy = H / 2
+        vectors_ext = np.concatenate(
+            (
+                result.T,
+                np.array([[hsx, -3 * hsy], [hsx, 5 * hsy], [-3 * hsx, hsy], [5 * hsx, hsy]]),
+            )
+        )
 
-        no_change = True
+        # Recomputing this each time isn't too inefficient.
+        vor = Voronoi(vectors_ext)
 
-        # For each point, move towards the centroid of the window.
-        for index, window in enumerate(windows):
-            if np.any(window):
-                centroid_x = np.mean(x_grid[window])
-                centroid_y = np.mean(y_grid[window])
-            else:  # If the window is empty (point overlap, etc), then reset this point.
-                centroid_x = np.random.choice(x_grid.ravel())
-                centroid_y = np.random.choice(x_grid.ravel())
+        if plot:
+            sx = shape[1]
+            sy = shape[0]
 
-            # Iterate
-            if (
-                np.abs(centroid_x - result[0, index]) < 1
-                and np.abs(centroid_y - result[1, index]) < 1
-            ):
-                pass
-            else:
-                no_change = False
-                result[0, index] = centroid_x
-                result[1, index] = centroid_y
+            # Use the built-in scipy function to plot a visualization of the windows.
+            fig = voronoi_plot_2d(vor)
 
-        # If this iteration did nothing, then finish.
-        if no_change:
-            break
+            # Plot a bounding box corresponding to the grid.
+            plt.plot(np.array([0, sx, sx, 0, 0]), np.array([0, 0, sy, sy, 0]), "r")
+
+            # Format and show the plot.
+            plt.xlim(-0.05 * sx, 1.05 * sx)
+            plt.ylim(1.05 * sy, -0.05 * sy)
+            plt.gca().set_aspect("equal")
+            plt.title("Voronoi Cells")
+            plt.show()
+
+        for i in range(result.shape[1]):
+            # Don't move points that don't make sense.
+            region_index = vor.point_region[i]
+            region = vor.regions[region_index]
+
+            if -1 in region or len(region) == 0:
+                continue
+
+            polygon = vor.vertices[region]
+            polygon = clip_to_box(polygon)
+            if len(polygon) < 3:
+                continue
+
+            # Otherwise, update the point to the centroid of its cell.
+            centroid = polygon_centroid(polygon)
+
+            result[0, i] = centroid[0]
+            result[1, i] = centroid[1]
 
     return result
 
@@ -1302,8 +1399,8 @@ def lloyds_points(grid, n_points, iterations=10, plot=False):
     """
     if (
         isinstance(grid, (list, tuple))
-        and isinstance(grid[0], (int))
-        and isinstance(grid[1], (int))
+        and isinstance(grid[0], INTEGER_TYPES)
+        and isinstance(grid[1], INTEGER_TYPES)
     ):
         shape = grid
     else:
@@ -1327,19 +1424,19 @@ def lloyds_points(grid, n_points, iterations=10, plot=False):
     if isinstance(grid, (list, tuple)):
         return result
     else:
-        return np.vstack((x_grid[result], y_grid[result]))
+        result = np.rint(result).astype(int)
+        return np.vstack((x_grid[result[0], result[1]], y_grid[result[0], result[1]]))
 
 
 def assign_vectors(vectors, assignment_options):
-    """
+    r"""
     Assigns each vector in ``vectors`` to the closest counterpart ``assignment_options``.
     Uses Euclidean distance.
 
     Note
     ~~~~
     An :math:`\mathcal{O}(N^2)` brute force approach is currently implemented,
-    though it is vectorized.
-    This could be sped up significantly.
+    though it is vectorized. This could be sped up significantly.
 
     Parameters
     ----------
@@ -1489,7 +1586,36 @@ def transform_grid(grid, transform=None, shift=None, direction="fwd"):
             )
 
 
-# Padding functions.
+# Shape and padding functions.
+
+
+def format_shape(shape, expected_dimension=2):
+    """
+    Helper function to format a shape tuple.
+
+    Parameters
+    ----------
+    shape : (int, int) OR tuple of int
+        The shape to format.
+    expected_dimension : int OR None
+        The expected number of dimensions. Ignored if ``None``.
+
+    Returns
+    -------
+    tuple
+        The formatted shape.
+    """
+    shape = tuple(np.squeeze(shape))
+
+    if expected_dimension is not None:
+        if len(shape) != expected_dimension:
+            raise ValueError(f"Expected shape with {expected_dimension} dimensions, got {len(shape)}")
+
+    for dim in shape:
+        if not isinstance(dim, INTEGER_TYPES) or dim <= 0:
+            raise ValueError(f"Expected positive integer dimensions, got {shape}")
+
+    return tuple([int(d) for d in shape])
 
 
 def pad(matrix, shape):
@@ -1512,6 +1638,8 @@ def pad(matrix, shape):
     """
     if shape is None:
         return matrix
+
+    shape = format_shape(shape)
 
     deltashape = (
         (shape[0] - matrix.shape[0]) / 2.0,
@@ -1542,7 +1670,8 @@ def unpad(matrix, shape):
     Parameters
     ----------
     matrix : numpy.ndarray OR (int, int)
-        Data to unpad. If this is a shape in :mod:`numpy` ``(h, w)`` form,
+        Data to unpad, if this is a matrix.
+        If this is a shape in :mod:`numpy` ``(h, w)`` form,
         returns the four slicing integers used to unpad that shape ``[pad_b:pad_t, pad_l:pad_r]``.
     shape : (int, int) OR None
         The desired shape of the ``matrix`` in :mod:`numpy` ``(h, w)`` form.
@@ -1557,8 +1686,8 @@ def unpad(matrix, shape):
     mshape = np.shape(matrix)
     return_args = False
     if len(mshape) == 1 or np.prod(mshape) == 2:
-        # Assume a shape was provided.
-        mshape = np.squeeze(matrix)
+        # Assume a shape was provided instead of a matrix.
+        mshape = format_shape(matrix)
         return_args = True
 
     if shape is None:
@@ -1566,6 +1695,8 @@ def unpad(matrix, shape):
             return (0, mshape[0], 0, mshape[1])
         else:
             return matrix
+
+    shape = format_shape(shape)
 
     deltashape = ((shape[0] - mshape[0]) / 2.0, (shape[1] - mshape[1]) / 2.0)
 

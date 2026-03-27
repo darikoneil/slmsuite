@@ -131,16 +131,17 @@ class Template(Camera):
         # method should be limited to camera-interface specific functions.
         return self.cam.get_image_function()     # TODO: Fill in proper function.
 
-    def _get_images_hw(self, timeout_s):
-        """See :meth:`.Camera._get_images_hw`."""
-        raise NotImplementedError()
-        # Similar to the core method but for a batch of images.
-        # This should be used if the camera has a hardware-specific method of grabbing
-        # frame batches. If not defined, the superclass captures and averages sequential
-        # _get_image_hw images.
-        return self.cam.get_images_function()     # TODO: Fill in proper function.
+# Optional methods:
 
-    # def flush(self):
+    # def _get_images_hw(self, image_count, timeout_s, out=None):
+    #     """See :meth:`.Camera._get_images_hw`."""
+    #     # Similar to the core method but for a batch of images.
+    #     # This should be used if the camera has a hardware-specific method of grabbing
+    #     # frame batches. If not defined, the superclass captures and averages sequential
+    #     # _get_image_hw images.
+    #     return self.cam.get_images_function()     # TODO: Fill in proper function.
+
+    # def flush(self, timeout_s=1):
     #     """See :meth:`.Camera.flush`."""
     #     raise NotImplementedError()
     #     # Clears ungrabbed images from the queue; the abstract default calls .get_image twice.

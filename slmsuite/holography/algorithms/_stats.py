@@ -328,7 +328,7 @@ class _HologramStats(object):
                 limit = np.array([np.amin(collapsed), np.amax(collapsed)])
 
                 # Add padding.
-                padding = int(np.diff(limit) * limit_padding) + 1
+                padding = int(np.diff(limit)[0] * limit_padding) + 1
                 limit += np.array([-padding, padding + 1])
 
                 # Check limits and store.
@@ -347,7 +347,7 @@ class _HologramStats(object):
         ):
         """
         Plots the amplitude (left) and phase (right) of the nearfield (plane of the SLM).
-        The amplitude is assumed (whether uniform, or experimentally computed) while the
+        The amplitude is assumed (whether uniform, assumed, or measured) while the
         phase is the result of optimization.
 
         Parameters
@@ -366,15 +366,8 @@ class _HologramStats(object):
         fig, axs = plt.subplots(1, 2, figsize=figsize)
 
         if source is None:
-            try:
-                if isinstance(self.amp, float):
-                    amp = self.amp
-                else:
-                    amp = self.amp.get()
-                phase = self.phase.get()
-            except:
-                amp = self.amp
-                phase = self.phase
+            amp = self.get_amp()
+            phase = self.get_phase()
         else:
             try:
                 amp = cp.abs(source).get()
@@ -437,6 +430,7 @@ class _HologramStats(object):
             limit_padding=0.1,
             figsize=(8,4),
             cbar=False,
+            axs=None
         ):
         """
         Plots an overview (left) and zoom (right) view of ``source``.
@@ -470,6 +464,8 @@ class _HologramStats(object):
             Size of the plot.
         cbar : bool
             Whether to add colorbars to the plots. Defaults to ``False``.
+        axs : matplotlib.axes.Axes OR None
+            If provided, uses these axes instead of creating new ones.
 
         Returns
         -------
@@ -524,18 +520,23 @@ class _HologramStats(object):
         # Check the limits in case the user provided them.
         for a in [0, 1]:
             limits[a] = np.clip(np.array(limits[a], dtype=int), 0, npsource.shape[1-a]-1)
-            if np.diff(limits[a]) == 0:
+            if np.diff(limits[a])[0] == 0:
                 raise ValueError("Clipped limit has zero length.")
 
         # Start making the plot
-        fig, axs = plt.subplots(1, 2, figsize=figsize)
+        if axs is None:
+            fig, axs = plt.subplots(1, 2, figsize=figsize)
+            _show = True
+        else:
+            _show = False
 
         # Plot the full target, blurred so single pixels are visible in low res
         b = 2 * int(np.amax(self.shape) / 400) + 1  # FUTURE: fix arbitrary
         npsource_blur = cv2.GaussianBlur(npsource, (b, b), 0)
+        
         full = axs[0].imshow(
             npsource_blur,
-            vmin=0, vmax=np.nanmax(npsource_blur),
+            vmin=0, vmax=np.nanmax(npsource),
             cmap=("twilight" if isphase else None),
             interpolation=("none" if isphase else "gaussian")
         )
@@ -544,7 +545,7 @@ class _HologramStats(object):
         axs[0].set_title(title + "Full")
 
         # Zoom in on our spots in a second plot
-        b = 2 * int(np.diff(limits[0]) / 200) + 1  # FUTURE: fix arbitrary
+        b = 2 * int(np.diff(limits[0])[0] / 200) + 1  # FUTURE: fix arbitrary
         zoom_data = npsource[
             np.ix_(np.arange(limits[1][0], limits[1][1]), np.arange(limits[0][0], limits[0][1]))
         ]
@@ -601,7 +602,11 @@ class _HologramStats(object):
             if i == 0:
                 ax.set_ylabel(toolbox.BLAZE_LABELS[units][1])
 
-        aspect = float(npsource.shape[1]) / float(npsource.shape[0])
+        # Scale aspect; knm might be displaying a non-square array.
+        if units == "knm":  
+            aspect = float(npsource.shape[1]) / float(npsource.shape[0])
+        else:
+            aspect = 1
 
         for ax in axs:
             ax.set_facecolor("#FFEEEE")
@@ -690,9 +695,9 @@ class _HologramStats(object):
             )
 
         # Bonus: Plot a red rectangle to show the extents of the zoom region
-        if np.diff(limits[0]) > 0 and np.diff(limits[1]) > 0:
+        if np.diff(limits[0])[0] > 0 and np.diff(limits[1])[0] > 0:
             extent = zoom.get_extent()
-            pix_width = (np.diff(extent[0:2])[0]) / np.diff(limits[0])
+            pix_width = (np.diff(extent[0:2])[0]) / np.diff(limits[0])[0]
             rect = plt.Rectangle(
                 tuple((np.array(extent[::2]) - pix_width / 2).astype(float)),
                 float(np.diff(extent[0:2])[0]),
@@ -715,8 +720,9 @@ class _HologramStats(object):
             cax = make_axes_locatable(axs[1]).append_axes("right", size="5%", pad=0.05)
             fig.colorbar(zoom, cax=cax, orientation="vertical")
 
-        plt.tight_layout()
-        plt.show()
+        if _show:
+            plt.tight_layout()
+            plt.show()
 
         return limits
 

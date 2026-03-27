@@ -1,5 +1,5 @@
 """
-Hardware control for Thorlabs cameras via :mod:`TLCameraSDK`.
+Hardware control for modern Thorlabs cameras via :mod:`TLCameraSDK`.
 The :mod:`thorlabs_tsi_sdk` module must
 be installed
 (See `ThorCam <https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=ThorCam>`_ -> Programming Interfaces).
@@ -10,6 +10,15 @@ After installing the SDK, extract the files in:
 ``~\\Program Files\\Thorlabs\\Scientific Imaging\\Scientific Camera Support\\Scientific_Camera_Interfaces.zip``.
 Follow the instructions in the extracted file Python_README.txt to install into your
 python environment via ``pip``.
+
+Important
+~~~~~~~~~
+Legacy Thorlabs cameras (e.g. UC480) are not supported by the modern Thorlabs SDK.
+For these cameras, consider using the
+:class:`slmsuite.hardware.cameras.instrumental.Instrumental`
+or
+:class:`slmsuite.hardware.cameras.pylablib.PyLabLib`
+interfaces which support UC480 drivers.
 
 Note
 ~~~~
@@ -88,6 +97,7 @@ class ThorCam(Camera):
         - ``'single_hardware'`` means only gets frame on hardware trigger or command.
 
         ``None`` means camera is disarmed.
+        This formalism will likely be deprecated in the future.
     """
 
     sdk = None
@@ -344,21 +354,19 @@ class ThorCam(Camera):
             See :attr:`profile`.
         """
         if profile != self.profile:
+            self.cam.disarm()
             if profile is None:
-                self.cam.disarm()
+                pass
             elif profile == "free":
-                self.cam.disarm()
                 self.cam.frames_per_trigger_zero_for_unlimited = 0
                 self.cam.operation_mode = 0  # Software triggered
                 self.cam.arm(2)
                 self.cam.issue_software_trigger()
             elif profile == "single":
-                self.cam.disarm()
                 self.cam.frames_per_trigger_zero_for_unlimited = 1
                 self.cam.operation_mode = 0  # Software triggered
                 self.cam.arm(2)
             elif profile == "single_hardware":
-                self.cam.disarm()
                 self.cam.frames_per_trigger_zero_for_unlimited = 1
                 self.cam.operation_mode = 1  # Hardware triggered
                 self.cam.arm(2)
@@ -367,7 +375,7 @@ class ThorCam(Camera):
 
             self.profile = profile
 
-    def _get_image_hw(self, timeout_s=.1, trigger=True, grab=True, attempts=1):
+    def _get_image_hw(self, timeout_s=.1, trigger=True, grab=True):
         """
         See :meth:`.Camera._get_image_hw`. By default ``trigger=True`` and ``grab=True`` which
         will result in blocking image acquisition.
@@ -378,6 +386,8 @@ class ThorCam(Camera):
 
         Parameters
         ----------
+        timeout_s : float
+            Time in seconds to wait for a frame.
         trigger : bool
             Whether or not to issue a software trigger.
         grab : bool
@@ -388,33 +398,25 @@ class ThorCam(Camera):
         numpy.ndarray or None
             Array of shape :attr:`shape` if ``grab=True``, else ``None``.
         """
-        should_trigger = trigger and self.profile == "single"
+        t = time.time()
 
-        for _ in range(attempts):
-            if should_trigger:
-                t = time.time()
-                self.cam.issue_software_trigger()
+        if trigger and self.profile == "single":
+            self.cam.issue_software_trigger()
 
-            ret = None
-            if grab:
-                # Start the timer.
-                if not should_trigger:
-                    t = time.time()
+        ret = None
 
-                frame = None
+        if grab:
+            frame = None
 
-                # Try to grab a frame until we succeed.
-                while time.time() - t < timeout_s and frame is None:
-                    frame = self.cam.get_pending_frame_or_null()
+            # Try to grab a frame until we succeed.
+            while time.time() - t < timeout_s and frame is None:
+                frame = self.cam.get_pending_frame_or_null()
 
-                ret = np.copy(frame.image_buffer) if frame is not None else None
-
-                if ret is not None:
-                    break
+            ret = np.copy(frame.image_buffer) if frame is not None else None
 
         return ret
 
-    def flush(self, timeout_s, verbose=False):
+    def flush(self, timeout_s=1):
         """
         See :meth:`.Camera.flush`.
 
@@ -430,9 +432,9 @@ class ThorCam(Camera):
         frame = self.cam.get_pending_frame_or_null()
         frametime = 0
 
-        # Continue flushing frames while the timeout is not exceeded, the
-        # returned frame is empty (None), or the frame returned super fast
-        # (cached)
+        # Continue flushing frames while the timeout is not exceeded,
+        # the returned frame is empty (None),
+        # or the frame returned super fast (cached).
         while (
             time.perf_counter() - t < timeout_s
             and frame is not None
@@ -442,13 +444,6 @@ class ThorCam(Camera):
             frame = self.cam.get_pending_frame_or_null()
             frametime = time.perf_counter() - t2
             ii += 1
-
-        if verbose:
-            print(
-                "Flushed {} frames in {:.2f} ms".format(
-                    ii, 1e3 * (time.perf_counter() - t)
-                )
-            )
 
     def is_capturing(self):
         """

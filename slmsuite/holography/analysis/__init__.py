@@ -6,9 +6,11 @@ import cv2
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from functools import reduce
 from scipy.optimize import curve_fit, minimize
 from scipy.ndimage import binary_erosion
+
 import warnings
 try:
     import cupy as cp   # type: ignore
@@ -121,30 +123,27 @@ def take(
         If ``xp`` is :mod:`cupy`, then a ``cupy.ndarray`` is returned.
     """
     # Clean variables.
-    if isinstance(size, REAL_TYPES):
+    if np.isscalar(size):
         size = int(size)
         size = (size, size)
     else:
-        size = (int(size[0]), int(size[1]))
+        s = np.asarray(size).ravel()
+        size = (int(s[0]), int(s[1]))
 
-    vectors = format_2vectors(vectors)
+    vectors = np.floor(format_2vectors(vectors)).astype(int)
 
     if xp is None:
         xp = np
 
     # Prepare helper variables. Future: consider caching for speed, if not negligible.
-    edge_x = _coordinates(size[0], centered)
-    edge_y = _coordinates(size[1], centered)
+    edge_x = np.floor(_coordinates(size[0], centered)).astype(int)
+    edge_y = np.floor(_coordinates(size[1], centered)).astype(int)
 
     region_x, region_y = np.meshgrid(edge_x, edge_y)
 
     # Get the lists for the integration regions.
-    integration_x = np.rint(np.add(
-        region_x.ravel()[:, np.newaxis].T, vectors[:][0][:, np.newaxis]
-    )).astype(int)
-    integration_y = np.rint(np.add(
-        region_y.ravel()[:, np.newaxis].T, vectors[:][1][:, np.newaxis]
-    )).astype(int)
+    integration_x = np.add(region_x.ravel()[:, np.newaxis].T, vectors[:][0][:, np.newaxis])
+    integration_y = np.add(region_y.ravel()[:, np.newaxis].T, vectors[:][1][:, np.newaxis])
 
     images = xp.array(images, copy=(False if np.__version__[0] == '1' else None))
     shape = xp.shape(images)
@@ -166,8 +165,12 @@ def take(
         pass  # Don't prevent out-of-range errors.
 
     if return_mask:
-        canvas = np.zeros(shape[:2], dtype=bool)
-        canvas[integration_y, integration_x] = True
+        if return_mask == 2:
+            canvas = np.full(images.shape, np.nan, dtype=float)
+            canvas[integration_y, integration_x] = images[integration_y, integration_x]
+        else:
+            canvas = np.zeros(shape[:2], dtype=bool)
+            canvas[integration_y, integration_x] = True
 
         if plot:
             plt.imshow(canvas)
@@ -191,13 +194,17 @@ def take(
         else:
             pass
 
+        # Plot if desired
+        if plot:
+            take_plot(xp.reshape(result, (vectors.shape[1], size[1], size[0])), separate_axes=True)
+
         if integrate:  # Sum over the integration axis.
             return xp.squeeze(xp.sum(result.astype(float), axis=-1))
         else:  # Reshape the integration axis.
             return xp.reshape(result, (vectors.shape[1], size[1], size[0]))
 
 
-def take_plot(images):
+def take_plot(images, shape=None, separate_axes=False, cbar=True):
     """
     Plots non-integrated results of :meth:`.take()` in a square array of subplots.
 
@@ -205,35 +212,104 @@ def take_plot(images):
     ----------
     images : numpy.ndarray
         Stack of 2D images, usually a :meth:`take()` output.
+    shape : (int, int) or None
+        Shape of the subplots.
+        If ``None``, the shape is determined by the number of images (smallest square).
+    separate_axes : bool
+        If ``True``, each image is plotted in a separate subplot.
+        If ``False``, uses :meth:`take_tile()` to plot all images on a single axes.
+    cbar : bool
+        Whether to include a colorbar. Currently only applies if ``separate_axes`` is ``False``.
     """
     # Gather helper variables and set the min and max of all the subplots.
     (img_count, sy, sx) = np.shape(images)
-    M = int(np.ceil(np.sqrt(img_count)))
+    img_count, (M, N) = _take_parse_shape(images, shape)
 
-    sx = sx / 2.0 - 0.5
-    sy = sy / 2.0 - 0.5
-    extent = (-sx, sx, -sy, sy)
+    if separate_axes:
+        sx = sx / 2.0 - 0.5
+        sy = sy / 2.0 - 0.5
+        extent = (-sx, sx, -sy, sy)
 
-    vmin = np.nanmin(images)
-    vmax = np.nanmax(images)
+        vmin = np.nanmin(images)
+        vmax = np.nanmax(images)
 
-    # Make the figure and subplots.
-    plt.figure(figsize=(12, 12))
+        # Make the figure and subplots.
+        plt.figure(figsize=(12, 12))
 
-    for x in range(img_count):
-        ax = plt.subplot(M, M, x + 1)
+        for x in range(img_count):
+            ax = plt.subplot(M, M, x + 1)
 
-        ax.imshow(
-            images[x, :, :],
-            vmin=vmin,
-            vmax=vmax,
-            extent=extent,
+            ax.imshow(
+                images[x, :, :],
+                vmin=vmin,
+                vmax=vmax,
+                extent=extent,
+                interpolation='none'
+            )
+            ax.axes.xaxis.set_visible(False)
+            ax.axes.yaxis.set_visible(False)
+    else:
+        im = plt.imshow(
+            take_tile(images, shape),
             interpolation='none'
         )
+        ax = plt.gca()
         ax.axes.xaxis.set_visible(False)
         ax.axes.yaxis.set_visible(False)
 
-    plt.show()
+        # Draw horizontal and vertical lines to separate the images.
+        for x in range(1, N):
+            ax.axvline(x=sx * x, color='r', linewidth=0.5)
+        for y in range(1, M):
+            ax.axhline(y=sy * y, color='r', linewidth=0.5)
+
+        if cbar:
+            cax = make_axes_locatable(ax).append_axes("right", size="2%", pad=0.05)
+            plt.gcf().colorbar(im, cax=cax, orientation="vertical")
+
+            # Return the current axes to the original one.
+            plt.sca(ax)
+
+
+def _take_parse_shape(images, shape=None):
+    """
+    Parses the shape of the images and returns the number of images and the shape.
+    """
+    (img_count, _, _) = np.shape(images)
+
+    # Parse shape.
+    if shape is None:
+        M = N = int(np.ceil(np.sqrt(img_count)))
+    else:
+        (M, N) = shape
+
+    if M*N < img_count:
+        warnings.warn("Not enough space to fit all images. Truncating the image count.")
+        img_count = M*N
+
+    return img_count, (M, N)
+
+
+def take_tile(images, shape=None):
+    """
+    Tiles a stack of images into a single image.
+    The stack is arranged into a grid of shape ``shape``.
+
+    Parameters
+    ----------
+    images : numpy.ndarray
+        Stack of 2D images, usually a :meth:`take()` output.
+    shape : (int, int) or None
+        Shape of the tiled grid.
+        If ``None``, the shape is determined by the number of images (smallest square).
+    """
+    (img_count, sy, sx) = np.shape(images)
+    img_count, (M, N) = _take_parse_shape(images, shape)
+
+    result = np.zeros((M*N, sy, sx), images.dtype)
+    result[:img_count, :, :] = images[:, :, :]
+
+    return result.reshape(M, N, sy, sx).transpose(0, 2, 1, 3).reshape(M*sy, N*sx)
 
 
 def image_remove_field(images, deviations=1, out=None):
@@ -279,8 +355,8 @@ def image_remove_field(images, deviations=1, out=None):
     # Parse out.
     if out is None:
         out = np.copy(images)
-    elif out is not images:
-        out = np.copyto(out, images)
+    elif not (out is images):
+        np.copyto(out, images)
 
     # Make sure that we're testing 3D images.
     single_image = len(images.shape) == 2
@@ -296,16 +372,46 @@ def image_remove_field(images, deviations=1, out=None):
     else:   # Mean + deviations * std case
         threshold = (
             np.nanmean(images_, axis=(1, 2))
-            + deviations*np.nanstd(images_, axis=(1, 2))
+            + deviations * np.nanstd(images_, axis=(1, 2))
         )
     if not single_image:
         threshold = np.reshape(threshold, (img_count, 1, 1))
 
+    out_max = np.amax(out, axis=(1,2), keepdims=True)
+
     # Remove the field. This needs the float from before. Unsigned integer could underflow.
-    out -= threshold
+    out -= threshold.astype(out.dtype)
     out[out < 0] = 0
+    out[out > out_max - threshold] = 0
 
     return out
+
+
+def image_relative_strehl(images):
+    r"""
+    Computes a metric proportional to the Strehl ratio of a stack of images.
+
+    .. math:: S = \frac{\max_{x,y} I}{\sum_{x,y} I}
+
+    Parameters
+    ----------
+    images : numpy.ndarray
+        A matrix in the style of the output of :meth:`take()`, with shape ``(image_count, h, w)``, where
+        ``(h, w)`` is the width and height of the 2D images and ``image_count`` is the number of
+        images. A single image is interpreted correctly as ``(1, h, w)`` even if
+        ``(h, w)`` is passed.
+
+    Returns
+    -------
+    numpy.ndarray
+        The relative Strehl ratio evaluated for every image. This is of size ``(image_count,)``
+        for provided ``images`` data of shape ``(image_count, h, w)``.
+    """
+    images = np.array(images, copy=(False if np.__version__[0] == '1' else None))
+    if len(images.shape) == 2:
+        images = np.reshape(images, (1, images.shape[0], images.shape[1]))
+
+    return np.amax(images, axis=(1,2)) / np.sum(images, axis=(1,2))
 
 
 def image_moment(images, moment=(1, 0), centers=(0, 0), grid=None, normalize=True, nansum=False):
@@ -399,9 +505,9 @@ def image_moment(images, moment=(1, 0), centers=(0, 0), grid=None, normalize=Tru
 
     # Handle normalization.
     if normalize:
-        normalization = np_sum(images, axis=(1, 2), keepdims=False)
+        normalization = np_sum(images, axis=(1, 2), keepdims=False).reshape((img_count, 1, 1))
         reciprocal = np.reciprocal(
-            normalization, where=normalization != 0, out=np.zeros(img_count,)
+            normalization, where=normalization != 0, out=np.zeros((img_count,1,1))
         )
     else:
         reciprocal = 1
@@ -525,7 +631,7 @@ def image_normalize(images, nansum=False, remove_field=False):
     normalization = image_normalization(images, nansum=nansum)
 
     if single_image:
-        normalization = float(normalization)
+        normalization = float(normalization.item())
         if normalization == 0:
             return np.zeros_like(images)
         else:
@@ -582,6 +688,11 @@ def image_positions(images, grid=None, normalize=True, nansum=False):
             image_moment(images, (0, 1), grid=grid, normalize=False, nansum=nansum),
         )
     )
+
+
+def image_centroids(images, grid=None, normalize=True, nansum=False):
+    """Alias for :meth:`image_positions()`"""
+    return image_positions(images, grid, normalize, nansum)
 
 
 def image_variances(images, centers=None, grid=None, normalize=True, nansum=False, exclude_shear=False):
@@ -663,6 +774,11 @@ def image_variances(images, centers=None, grid=None, normalize=True, nansum=Fals
         m11 = image_moment(images, (1, 1), centers=centers, grid=grid, normalize=False, nansum=nansum)
 
         return np.vstack((m20, m02, m11))
+
+
+def image_std(images, centers=None, grid=None, normalize=True, nansum=False):
+    """Near-alias of :meth:`image_variances()`. Excludes the shear variance."""
+    return np.sqrt(image_variances(images, centers, grid, normalize, nansum, exclude_shear=True))
 
 
 def image_ellipticity(variances):
@@ -757,7 +873,7 @@ def image_ellipticity_angle(variances):
 
     Parameters
     ----------
-    moment2 : numpy.ndarray
+    variances : numpy.ndarray
         The output of :meth:`image_variances()`. Shape ``(3, image_count)``.
 
     Returns
@@ -785,10 +901,6 @@ def image_ellipticity_angle(variances):
     # We're trying to solve for angle, which is just atan(x/y). We can solve for x/y:
     #   m11 * x = (eig_plus - m02) * y        ==>         x/y = (eig_plus - m02) / m11
     return np.arctan2(eig_plus - m02, m11, where=m11 != 0, out=np.zeros_like(m11))
-
-
-# def batch_fit(y, x, function, guess, plot=False):
-#     pass
 
 
 def image_fit(images, grid=None, function=gaussian2d, guess=None, plot=False):
@@ -959,9 +1071,19 @@ def image_fit(images, grid=None, function=gaussian2d, guess=None, plot=False):
     return result
 
 
-def image_zernike_fit(images, grid, order=10, iterations=2, leastsquares=True, **kwargs):
+# Helpers for phase images.
+
+def image_zernike_fit(
+    phase_images,
+    grid,
+    order=10,
+    iterations=2,
+    leastsquares=True,
+    unwrap=True,
+    **kwargs
+):
     """
-    Fits sets of Zernike polynomials to a stack of ``images``, up to a desired ``order``.
+    Fits sets of Zernike polynomials to a stack of ``phase_images``, up to a desired ``order``.
     This is done in two steps:
 
     -   First, an iterative approach is used to subtract Zernike orders from each image.
@@ -982,25 +1104,37 @@ def image_zernike_fit(images, grid, order=10, iterations=2, leastsquares=True, *
 
     Parameters
     ----------
-    images : numpy.ndarray (``image_count``, ``height``, ``width``)
-        An image or array of images to fit. A single image is interpreted correctly as
+    phase_images : numpy.ndarray (``image_count``, ``height``, ``width``)
+        An image or array of phase_images to fit. A single image is interpreted correctly as
         ``(1, h, w)`` even if ``(h, w)`` is passed.
     grid : (array_like, array_like) OR None
-        Components of the meshgrid describing coordinates over the images.
-        If ``None``, makes a grid with unit pitch centered on the images.
+        Components of the meshgrid describing coordinates over the phase_images.
+        If ``None``, makes a grid with unit pitch centered on the phase_images.
     order : int
         Maximal radial Zernike order for the fitting basis.
     iterations : int
         Number of times to iterate the subtractive approach.
     leastsquares : bool
         Whether to do the least squares optimization step.
+    unwrap : bool
+        Whether to unwrap the phase images before fitting.
     **kwargs
         Passed to :meth:`~slmsuite.holography.toolbox.phase.zernike_sum()`.
     """
     # Setup.
-    if images.ndim == 2:
-        images = images.reshape((1, *images.shape))
-    image_count = images.shape[0]
+    if phase_images.ndim == 2:
+        phase_images = phase_images.reshape((1, *phase_images.shape))
+    image_count = phase_images.shape[0]
+
+    # Unwrap
+    if unwrap:
+        # Adding temporary phase unwrapping solution for testing
+        try:
+            from skimage.restoration import unwrap_phase
+        except ImportError:
+            raise ImportError("Phase unwrapping requires scikit-image.")
+
+        images = [unwrap_phase(im) for im in images]
 
     # Generate Zernike terms and norms.
     order = int(order + 1)
@@ -1017,7 +1151,7 @@ def image_zernike_fit(images, grid, order=10, iterations=2, leastsquares=True, *
 
     # Preallocate the result.
     vectors_zernike = np.zeros((D, image_count))
-    images_remainders = np.copy(images)     # Copy the data
+    images_remainders = np.copy(phase_images)     # Copy the data
 
     # First, make a guess of the result based on iteratively subtracting Zernike terms.
     for _ in range(int(iterations)):
@@ -1054,7 +1188,7 @@ def image_zernike_fit(images, grid, order=10, iterations=2, leastsquares=True, *
 
             # Try the fit.
             try:
-                popt, _ = curve_fit(zsum, grid_ravel, images[j].ravel(), ftol=1e-5, p0=vectors_zernike[:, j])
+                popt, _ = curve_fit(zsum, grid_ravel, phase_images[j].ravel(), ftol=1e-5, p0=vectors_zernike[:, j])
                 vectors_zernike = popt.reshape(vectors_zernike.shape)
             except RuntimeError:    # The fit failed if scipy says so.
                 pass
@@ -1132,7 +1266,8 @@ def image_vortices_coordinates(phase_image, mask=None):
 
     return coordinates, weights
 
-def image_vortices_remove(phase_image, mask=None, return_vortices_negative=False):
+
+def image_remove_vortices(phase_image, mask=None, return_vortices_negative=False):
     """
     Find and then remove all the phase vortices in a phase image.
 
@@ -1141,7 +1276,8 @@ def image_vortices_remove(phase_image, mask=None, return_vortices_negative=False
     phase_image : array_like
         Image to remove vortices upon.
     mask : array_like OR None
-        Boolean mask to remove within. This is advisable for large images.
+        Removes vortices whose coordinates are inside this mask.
+        The full phase image is changed, even outside the mask.
     return_vortices_negative : bool
         If ``False``, the original image is modified in-place with vortices removed
         inside the mask and returned.
@@ -1167,15 +1303,144 @@ def image_vortices_remove(phase_image, mask=None, return_vortices_negative=False
     else:
         canvas = phase_image
 
-
-    if mask is None:
-        for x, y, w in zip(coordinates[1], coordinates[0], weights):
-            canvas -= w * xp.arctan2(grid[0] - x, grid[1] - y)
-    else:
-        for x, y, w in zip(coordinates[1], coordinates[0], weights):
-            canvas[mask] -= w * xp.arctan2(grid[0][mask] - x, grid[1][mask] - y)
+    for x, y, w in zip(coordinates[1], coordinates[0], weights):
+        canvas -= w * xp.arctan2(grid[0] - x, grid[1] - y)
 
     return canvas
+
+
+def image_blaze_remove(**kwargs):
+    """
+    Backwards compatible alias for :meth:`image_remove_blaze()`.
+    """
+    warnings.warn("image_blaze_remove is deprecated; use image_remove_blaze instead.", DeprecationWarning)
+    return image_remove_blaze(**kwargs)
+
+
+def image_remove_blaze(phase_image, mask=None, plot=False):
+    """
+    Remove a global blaze from a phase image.
+
+    Parameters
+    ----------
+    phase_image : np.ndarray
+        The phase image to have the blaze removed.
+    mask : np.ndarray OR None
+        If provided, the mask will weight the significance of the blaze.
+        This can be the amplitude image, such that the blaze removal is
+        more effective in brighter regions.
+    plot : bool
+        Whether to enable debug plots.
+
+    Returns
+    -------
+    np.ndarray
+        A phase image with the blaze removal applied.
+    """
+    phase = np.mod(phase_image, 2*np.pi)
+
+    # Get the gradients across the image.
+    dx = np.mod(np.gradient(phase, axis=1) + np.pi/2, np.pi) - np.pi/2
+    dy = np.mod(np.gradient(phase, axis=0) + np.pi/2, np.pi) - np.pi/2
+
+    # Find the mean gradient, potentially weighted.
+    if mask is None:
+        dx_mean = np.nanmean(dx)
+        dy_mean = np.nanmean(dy)
+    else:
+        dx_mean = np.nansum(dx * mask) / np.nansum(mask)
+        dy_mean = np.nansum(dy * mask) / np.nansum(mask)
+
+    # Subtract the gradient and re-mod.
+    x = np.arange(phase.shape[1])
+    y = np.arange(phase.shape[0])
+    X, Y = np.meshgrid(x, y)
+    result = np.mod(phase - dx_mean * X - dy_mean * Y, 2 * np.pi)
+
+    if plot:
+        plt.figure(figsize=(20, 10))
+
+        plt.subplot(1, 4, 1)
+        plt.imshow(phase)
+        plt.title('phase')
+
+        plt.subplot(1, 4, 2)
+        plt.imshow(dx)
+        plt.title('dx')
+
+        plt.subplot(1, 4, 3)
+        plt.imshow(dy)
+        plt.title('dy')
+
+        plt.subplot(1, 4, 4)
+        plt.imshow(result)
+        plt.title('removed')
+        plt.show()
+
+    return result
+
+
+def image_reduce_wraps(phase_image, mask=None, steps=10, plot=False):
+    """
+    Reduce the number of phase wraps in the image by adding a global offset.
+
+    Parameters
+    ----------
+    phase_image : np.ndarray
+        The phase image to be offset.
+    mask : np.ndarray OR None
+        If provided, the mask will weight the significance of the phase wraps.
+        This can be the amplitude image, such that fewer wraps appear where there is
+        light.
+    steps : int
+        The number of steps to try for the phase offset.
+    plot : bool
+        Whether to enable debug plots.
+
+    Returns
+    -------
+    np.ndarray
+        A phase image with the offset applied.
+    """
+    # Initialize such that the first iteration is always the best.
+    fom_min = np.inf
+    result = None
+
+    # Loop through all offsets.
+    for phi in range(steps):
+        shift = phi * 2 * np.pi / steps
+        phase_shifted = np.mod(phase_image + shift, 2 * np.pi)
+
+        # Find where the phase wraps.
+        wrapping = (
+            np.abs(np.gradient(phase_shifted, axis=1)) +
+            np.abs(np.gradient(phase_shifted, axis=0))
+        ) > np.pi
+
+        if mask is not None:
+            wrapping = wrapping * mask
+
+        # Sum the total cut area, potentially weighted by the mask.
+        fom = np.sum(wrapping)
+
+        if fom < fom_min:
+            fom_min = fom
+            result = phase_shifted
+
+            # If the mask is smaller than the 0 -> 2pi range, shift to either end.
+            min = np.nanmin(result)
+            mean = np.nanmean(result)
+            max = np.nanmax(result)
+
+            if mean - min < max - mean:
+                result -= min
+            else:
+                result -= max - 2 * np.pi
+
+            result = np.mod(result, 2 * np.pi)
+
+    return result
+
 
 # Array fitting functions.
 
@@ -1580,7 +1845,7 @@ def blob_array_detect(
                 "- Increasing exposure time to enhance the prominence of spots,\n"
                 "- Increasing the pitch of the array in the image, "
                 "which can isolate spots from neighboring crosstalk,\n"
-                "- Create an issue at https://github.com/slmsuite/slmsuite/issues, "
+                "- Create an issue at https://github.com/holodyne/slmsuite/issues, "
                 "attaching the image data that is resulting in failure. "
                 "You can use `cam.save()` to record the last image alongside metadata."
             )
@@ -1634,11 +1899,8 @@ def blob_array_detect(
                 new = ((dnorm[i,:] < tol) | (inorm[i,:] < tol)) & np.array(tags == 0) #  | (inorm[i,:] < tol)
                 tags[new] = group
                 if np.any(new): group += 1
-
-            # Calc centers of k most populated clusters.
-            tag, count = np.unique(tags, return_counts=True)
-            best_groups = np.argsort(-count)[:k]
-
+                
+            # Get the centerpoint of each group
             def mean_group(points):
                 len0 = np.sum(np.square(points[0, :]))
                 diff = np.sum(np.square(points - points[[0], :]), axis=1)
@@ -1651,10 +1913,37 @@ def blob_array_detect(
 
                 return final
 
+            # Filter by the k most populated clusters.
+            tag, count = np.unique(tags, return_counts=True)
+            k = min(k, len(count))
+            best_groups = np.argsort(-count)[:k]
             centers = np.array([
                 mean_group(points[tags == tag[group]])
                 for group in best_groups
             ])
+            count = count[best_groups]
+
+            # Order by closest point to center. Choose the closest as our base vector.
+            distance_to_center = np.sqrt(np.square(centers[:, 0]) + np.square(centers[:, 1]))
+            distance_to_center /= np.max(distance_to_center)    # normalize
+            best_groups = np.argsort(distance_to_center)
+            count = count[best_groups]
+            centers = centers[best_groups, :]
+            
+            # Weight by orthogonality to the first vector.
+            centers_length = np.sqrt(np.sum(np.square(centers), 1, keepdims=True))
+            centers_norm = centers / centers_length
+            cross_product = (
+                centers_norm[:, 0] * centers_norm[0, 1] -
+                centers_norm[:, 1] * centers_norm[0, 0]
+            )
+            cross_product[0] = 2
+
+            # Prefer orthogal vectors most, then prefer distance to center.
+            fom = 1e4 * (np.abs(cross_product)) - distance_to_center
+            best_groups = np.argsort(-fom)
+            count = count[best_groups]
+            centers = centers[best_groups, :]
 
             return centers
 
@@ -1721,7 +2010,7 @@ def blob_array_detect(
             # Plot a red rectangle to show the extents of the zoom region
             rect = plt.Rectangle(
                 (float(xl[0]), float(yl[0])),
-                float(np.diff(xl)), float(np.diff(yl)),
+                float(np.diff(xl).item()), float(np.diff(yl).item()),
                 ec="r", fc="none"
             )
             axs[0].add_patch(rect)
@@ -1828,8 +2117,8 @@ def blob_array_detect(
         area = size[0] * size[1]
         perimeter = 2 * (size[0] + size[1]) + 4
 
-        mask[y_larger, x_larger] = -area
-        mask[y_array, x_array] = perimeter
+        mask[y_larger, x_larger] = -area/perimeter
+        mask[y_array, x_array] = 1
 
         mask = _make_8bit(mask)
 
@@ -1854,7 +2143,8 @@ def blob_array_detect(
                 )
                 match = img_8bit[cam_array_ind]
 
-                wmask = 0.1
+                # TODO: replace with take
+                wmask = 0.2
                 w = np.max([1, int(wmask * max_pitch)])
                 edge = np.arange(-w, w + 1)
 
@@ -1894,8 +2184,9 @@ def blob_array_detect(
                 rotation = np.array([[c, -s], [s, c]])
 
                 # Look for the second missing spot.
-                flip_parity = int(spotbooleans_rotated[-1, -2]) - int(
-                    spotbooleans_rotated[-2, -1]
+                flip_parity = (
+                    int(spotbooleans_rotated[-1, -2]) -
+                    int(spotbooleans_rotated[-2, -1])
                 )
 
                 assert abs(flip_parity) == 1
@@ -2026,7 +2317,7 @@ def blob_array_detect(
         # Plot a red rectangle to show the extents of the zoom region
         rect = plt.Rectangle(
             (float(xl[0]), float(yl[0])),
-            float(np.diff(xl)), float(np.diff(yl)),
+            float(np.diff(xl).item()), float(np.diff(yl).item()),
             ec="r", fc="none"
         )
         axs[0].add_patch(rect)

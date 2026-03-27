@@ -13,7 +13,7 @@ spatial light modulator (SLM) control and holography.
    `across a field of view
    <https://slmsuite.readthedocs.io/en/latest/_examples/multipoint_calibration.html>`_.
 
-   .. image:: https://raw.githubusercontent.com/slmsuite/slmsuite-examples/main/examples/ex-zernike-spots-dark.gif
+   .. image:: https://raw.githubusercontent.com/holodyne/slmsuite-examples/main/examples/ex-zernike-spots-dark.gif
       :class: only-dark
       :alt:
          Alongside steering spots in three dimensions, this feature enables removal of
@@ -21,7 +21,7 @@ spatial light modulator (SLM) control and holography.
          is sourced along a different optical path, and slmsuite can correct for each
          different aberration experienced.
 
-   .. image:: https://raw.githubusercontent.com/slmsuite/slmsuite-examples/main/examples/ex-zernike-spots.gif
+   .. image:: https://raw.githubusercontent.com/holodyne/slmsuite-examples/main/examples/ex-zernike-spots.gif
       :class: only-light
       :alt:
          Alongside steering spots in three dimensions, this feature enables removal of
@@ -46,12 +46,12 @@ spatial light modulator (SLM) control and holography.
    `multiple planes
    <https://slmsuite.readthedocs.io/en/latest/_examples/multiplane_holography.html>`_  of focus, color, or basis.
 
-   .. image:: https://raw.githubusercontent.com/slmsuite/slmsuite-examples/main/examples/ex-slmsuite-3d-dark.gif
+   .. image:: https://raw.githubusercontent.com/holodyne/slmsuite-examples/main/examples/ex-slmsuite-3d-dark.gif
       :class: only-dark
       :alt:
          Advanced meta-hologram programming optimizes spot and image objectives simultaneously.
 
-   .. image:: https://raw.githubusercontent.com/slmsuite/slmsuite-examples/main/examples/ex-slmsuite-3d.gif
+   .. image:: https://raw.githubusercontent.com/holodyne/slmsuite-examples/main/examples/ex-slmsuite-3d.gif
       :class: only-light
       :alt:
          Advanced meta-hologram programming optimizes spot and image objectives simultaneously.
@@ -61,17 +61,17 @@ spatial light modulator (SLM) control and holography.
 .. raw:: html
 
    <p align="center">
-   <a href="https://slmsuite.readthedocs.io/en/latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/slmsuite/badge/?version=latest"></a>
-   <a href="https://pypi.org/project/slmsuite/"><img alt="PyPi Package" src="https://img.shields.io/badge/pypi-v0.2.1-3776AB.svg"></a>
-   <a href="https://github.com/slmsuite/slmsuite/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/slmsuite/slmsuite?color=purple"></a>
+   <a href="https://pypi.org/project/slmsuite/"><img alt="PyPi Package" src="https://img.shields.io/pypi/v/slmsuite"></a>
+   <a href="https://github.com/holodyne/slmsuite/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/holodyne/slmsuite?color=purple"></a>
    <a href="https://github.com/psf/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg"></a>
+   <a href="https://github.com/holodyne/slmsuite"><img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/holodyne/slmsuite"></a>
    </p>
 
-Contact us at qp-slm@mit.edu or on
-`GitHub <https://github.com/slmsuite/slmsuite>`_
-`Issues <https://github.com/slmsuite/slmsuite/issues>`_
+Contact us at slmsuite@holodyne.com or on
+`GitHub <https://github.com/holodyne/slmsuite>`_
+`Issues <https://github.com/holodyne/slmsuite/issues>`_
 or
-`Discussions <https://github.com/slmsuite/slmsuite/discussions>`_.
+`Discussions <https://github.com/holodyne/slmsuite/discussions>`_.
 
 .. toctree::
    :maxdepth: 2
@@ -89,4 +89,4 @@ or
    tips
 
 .. |slmsuite| replace:: :mod:`slmsuite`
-.. _slmsuite: https://github.com/slmsuite/slmsuite
+.. _slmsuite: https://github.com/holodyne/slmsuite

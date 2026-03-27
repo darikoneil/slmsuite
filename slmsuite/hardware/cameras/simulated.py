@@ -104,6 +104,7 @@ class SimulatedCamera(Camera):
         elif any([r != s for r, s in zip(resolution, slm.shape[::-1])]):
             self._interpolate = True
 
+        # dtype and other parameters are set here in init.
         super().__init__(resolution, pitch_um=pitch_um, **kwargs)
 
         # Digital gain emulates exposure
@@ -118,8 +119,11 @@ class SimulatedCamera(Camera):
             np.arange(resolution[1]),
         )
 
-        if M is not None and b is not None:
-            self.set_affine(M, b)
+        # Defaults to alignment with the SLM grid.
+        self.set_affine(M, b)
+
+    def close(self):
+        pass
 
     def set_affine(self, M=None, b=None, **kwargs):
         """
@@ -147,53 +151,60 @@ class SimulatedCamera(Camera):
         # If kwargs are passed instead of M and b, use these to build M, b
         if M is None or b is None:
             f_eff = kwargs.pop("f_eff", None)
-            if f_eff is None:
-                raise RuntimeError("'f_eff' must be passed if M or b are not set.")
-            M, b = self.build_affine(f_eff, **kwargs)
+            if f_eff is not None:
+                M, b = self.build_affine(f_eff, **kwargs)
 
-        self.M = M
-        self.b = b
-
-        # Affine transform the camera grid ("ij"->"kxy")
-        self._interpolate = True
+        self._interpolate = not (M is None or b is None)
         self.grid = np.meshgrid(
             np.arange(self.shape[1]),
             np.arange(self.shape[0]),
         )
-        self.grid = toolbox.transform_grid(self, M, b, direction="rev")
+        self.shape_padded = self._slm.shape
 
-        # Fourier space must be sufficiently padded to resolve the camera pixels.
-        dkxy = np.sqrt(
-            (self.grid[0][:2, :2] - self.grid[0][0, 0]) ** 2 +
-            (self.grid[1][:2, :2] - self.grid[1][0, 0]) ** 2
-        )
-        dkxy_min = dkxy.ravel()[1:].min()
+        if self._interpolate:
+            self.M = M
+            self.b = b
 
-        self.shape_padded = Hologram.get_padded_shape(self._slm, precision=dkxy_min)
+            # Affine transform the camera grid ("ij"->"kxy")
+            self.grid = toolbox.transform_grid(self, M, b, direction="rev")
+
+            # Fourier space must be sufficiently padded to resolve the camera pixels.
+            dkxy = np.sqrt(
+                (self.grid[0][:2, :2] - self.grid[0][0, 0]) ** 2 +
+                (self.grid[1][:2, :2] - self.grid[1][0, 0]) ** 2
+            )
+            dkxy_min = dkxy.ravel()[1:].min()
+
+            self.shape_padded = Hologram.get_padded_shape(self._slm, precision=dkxy_min)
+
+            # Convert kxy -> knm (0,0 at corner): 1/dx -> Npx
+            self.knm_cam = cp.array(
+                [
+                    self.shape_padded[0] * self._slm.pitch[1] * self.grid[1] + self.shape_padded[0] / 2,
+                    self.shape_padded[1] * self._slm.pitch[1] * self.grid[0] + self.shape_padded[1] / 2,
+                ]
+            )
+
+            if (
+                cp.amax(cp.abs(self.knm_cam[0] - self.shape_padded[0]/2)) > self.shape_padded[1]/2 or
+                cp.amax(cp.abs(self.knm_cam[1] - self.shape_padded[1]/2)) > self.shape_padded[0]/2
+            ):
+                warnings.warn(
+                    "Camera extends beyond the accessible SLM k-space;"
+                    " some pixels may not be targetable."
+                )
 
         phase = -self._slm.display.astype(float) * (2 * np.pi / self._slm.bitresolution)
-        self._hologram = Hologram(
-            self.shape_padded,
-            amp=self._slm.source["amplitude_sim"],
-            phase=phase - phase.min() + self._slm.source["phase_sim"],
-            slm_shape=self._slm,
-        )
 
-        # Convert kxy -> knm (0,0 at corner): 1/dx -> Npx
-        self.knm_cam = cp.array(
-            [
-                self.shape_padded[0] * self._slm.pitch[1] * self.grid[1] + self.shape_padded[0] / 2,
-                self.shape_padded[1] * self._slm.pitch[1] * self.grid[0] + self.shape_padded[1] / 2,
-            ]
-        )
+        # Suppress power of 2 warning from Hologram.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=Warning)
 
-        if (
-            cp.amax(cp.abs(self.knm_cam[0] - self.shape_padded[0]/2)) > self.shape_padded[1]/2 or
-            cp.amax(cp.abs(self.knm_cam[1] - self.shape_padded[1]/2)) > self.shape_padded[0]/2
-        ):
-            warnings.warn(
-                "Camera extends beyond the accessible SLM k-space;"
-                " some pixels may not be targetable."
+            self._hologram = Hologram(
+                self.shape_padded,
+                amp=self._slm.source["amplitude_sim"],
+                phase=phase - phase.min() + self._slm.source["phase_sim"],
+                slm_shape=self._slm,
             )
 
     def build_affine(
@@ -316,7 +327,7 @@ class SimulatedCamera(Camera):
 
         return M, b
 
-    def flush(self):
+    def flush(self, timeout_s=1):
         """
         See :meth:`.Camera.flush`.
         """
@@ -329,25 +340,6 @@ class SimulatedCamera(Camera):
     def _set_exposure_hw(self, exposure_s):
         """See :meth:`.Camera._set_exposure_hw`."""
         self.exposure_s = exposure_s
-
-    def _get_dtype(self):
-        """Spoof the datatype because we don't have an image to return"""
-        if self.bitdepth <= 0:
-            raise ValueError("Non-positive bitdepth does not make sense.")
-        elif self.bitdepth <= 8:
-            return np.uint8
-        elif self.bitdepth <= 16:
-            return np.uint16
-        elif self.bitdepth <= 32:
-            return np.uint32
-        elif self.bitdepth <= 64:
-            return np.uint64
-        elif self.bitdepth <= 128:
-            return np.uint128
-        elif self.bitdepth <= 256:
-            return np.uint256
-        else:
-            raise ValueError(f"Numpy cannot encode bitdepth {self.bitdepth}.")
 
     def _get_image_hw(self, timeout_s):
         """
